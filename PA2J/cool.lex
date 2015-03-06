@@ -82,7 +82,7 @@ int nest;
 %state COMMENTb
 %cup
 
-WS=[\040\f\r\t\v]
+WS=[\040\f\r\t\013]
 
 %%
 
@@ -105,19 +105,13 @@ WS=[\040\f\r\t\v]
 <COMMENTb>.*               { }
 
 
-<STRING>\"                {  yybegin(YYINITIAL); 
-                             AbstractSymbol stringid = AbstractTable.stringtable.addString(string_buf.toString());
-                             return new Symbol(TokenConstants.STR_CONST, stringid); 
-                          }
-
 <STRING>[^\"\n]*[\"\n]    {
     if (!is_closed) {
         int len = 0;
         while (yytext().charAt(len) != '\n' && yytext().charAt(len) != '\"') { len++; }
-
         int yy_idx = 0;
         for (yy_idx = 0; yy_idx < len+1; yy_idx++) {
-            if (yytext().charAt(yy_idx) == '\"' && !is_escaped) { 
+            if (yytext().charAt(yy_idx) == '\"' && !is_escaped) {          
                 is_closed = true; 
                 break; 
             }
@@ -143,7 +137,6 @@ WS=[\040\f\r\t\v]
             } else {
                 if(yytext().charAt(yy_idx) == '\n') { 
                     curr_lineno++;
-                    //string_buf_ptr = 0;
                     yybegin(YYINITIAL);
                     return new Symbol(TokenConstants.ERROR, "Unterminated string constant");
                 }
@@ -154,7 +147,6 @@ WS=[\040\f\r\t\v]
     } 
     if (is_closed) {
         yybegin(YYINITIAL);
-        //string_buf_ptr = 0;
         int len = string_buf.length() + 1;
         if (len > MAX_STR_CONST) { return new Symbol(TokenConstants.ERROR, "String constant too long"); }
         AbstractSymbol strid = AbstractTable.stringtable.addString(string_buf.toString());
@@ -163,7 +155,6 @@ WS=[\040\f\r\t\v]
 }
 
 <STRING>[^\"\n\0]*                                 { /* Eat the line when the it is followed by EOF */ }
-
 
 <YYINITIAL>{WS}                                    {}
 <YYINITIAL>"+"                                     { return new Symbol(TokenConstants.PLUS); }
