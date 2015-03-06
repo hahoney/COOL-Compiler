@@ -2,14 +2,6 @@
  *  The scanner definition for COOL.
  */
 
-/* Some issues in the Java version
-(1) The skeleton program does not run correctly. Different from the C++ version
-the scanner has to handle the line feed character EOL. It is not seen in vi
-unless ":set list" is set. EOL could be written as [\r\n]+
-*/
-
-
-
 import java_cup.runtime.Symbol;
 
 %%
@@ -41,6 +33,12 @@ import java_cup.runtime.Symbol;
     AbstractSymbol curr_filename() {
 	return filename;
     }
+
+int string_buf_ptr;
+boolean is_closed;
+boolean is_escaped;
+int nest;
+
 %}
 
 %init{
@@ -48,8 +46,6 @@ import java_cup.runtime.Symbol;
 /*  Stuff enclosed in %init{ %init} is copied verbatim to the lexer
  *  class constructor, all the extra initialization you want to do should
  *  go here.  Don't remove or modify anything that was there initially. */
-
-    // empty for now
 %init}
 
 %eofval{
@@ -65,6 +61,12 @@ import java_cup.runtime.Symbol;
     case YYINITIAL:
 	/* nothing special to do in the initial state */
 	break;
+    case STRING:
+        yybegin(YYINITIAL); 
+        return new Symbol(TokenConstants.ERROR, "EOF in string constant");
+    case COMMENTa:
+        yybegin(YYINITIAL); 
+        return new Symbol(TokenConstants.ERROR, "EOF in comment");
 	/* If necessary, add code for other states here, e.g:
 	   case COMMENT:
 	   ...
@@ -75,96 +77,143 @@ import java_cup.runtime.Symbol;
 %eofval}
 
 %class CoolLexer
+%state STRING
+%state COMMENTa
+%state COMMENTb
 %cup
 
-INTEGER=[0-9]+
-LETTER=[a-zA-Z]
-UNDERSCORE='_'
-STRING={LETTER}+
+WS=[\040\f\r\t\v]
 
-TYPEID={A-Z}{INTEGER|LETTER|UNDERSCORE}*
-OBJID={a-z}{INTEGER|LETTER|UNDERSCORE}*
-NONEWLINE_WS=[ \f\r\t\v]+
-EOL=(\r|\n|\r\n)
-
-A=[Aa]
-B=[Bb]
-C=[Cc]
-D=[Dd]
-E=[Ee]
-F=[Ff]
-G=[Gg]
-H=[Hh]
-I=[Ii]
-J=[Jj]
-K=[Kk]
-L=[Ll]
-M=[Mm]
-N=[Nn]
-O=[Oo]
-P=[Pp]
-Q=[Qq]
-R=[Rr]
-S=[Ss]
-T=[Tt]
-U=[Uu]
-V=[Vv]
-W=[Ww]
-X=[Xx]
-Y=[Yy]
-Z=[Zz]
 %%
 
-<YYINITIAL>{C}{L}{A}{S}{S}	 	{ return new Symbol(TokenConstants.CLASS); }
-<YYINITIAL>{E}{L}{S}{E}		 	{ return new Symbol(TokenConstants.ELSE); }
-<YYINITIAL>{F}{I} 			{ return new Symbol(TokenConstants.FI); }
-<YYINITIAL>{I}{F} 			{ return new Symbol(TokenConstants.IF); }
-<YYINITIAL>{I}{N} 			{ return new Symbol(TokenConstants.IN); }
-<YYINITIAL>{I}{N}{H}{E}{R}{I}{T}{S} 	{ return new Symbol(TokenConstants.INHERITS); }
-<YYINITIAL>{L}{E}{T} 			{ return new Symbol(TokenConstants.LET); }
-<YYINITIAL>{L}{O}{O}{P}			{ return new Symbol(TokenConstants.LOOP); }
-<YYINITIAL>{P}{O}{O}{L} 	        { return new Symbol(TokenConstants.POOL); }
-<YYINITIAL>{T}{H}{E}{N} 		{ return new Symbol(TokenConstants.THEN); }
-<YYINITIAL>{W}{H}{I}{L}{E}       	{ return new Symbol(TokenConstants.WHILE); }
-<YYINITIAL>{C}{A}{S}{E}			{ return new Symbol(TokenConstants.CASE); }
-<YYINITIAL>{E}{S}{A}{C}			{ return new Symbol(TokenConstants.ESAC); }
-<YYINITIAL>{O}{F}			{ return new Symbol(TokenConstants.OF); }
-<YYINITIAL>{N}{E}{W}			{ return new Symbol(TokenConstants.NEW); }
-<YYINITIAL>{N}{O}{T}			{ return new Symbol(TokenConstants.NOT); }
-<YYINITIAL>{I}{S}{V}{O}{I}{D}		{ return new Symbol(TokenConstants.ISVOID); }
-<YYINITIAL>(t){R}{U}{E}			{ return new Symbol(TokenConstants.BOOL_CONST, new Boolean(true)); }
-<YYINITIAL>(f){A}{L}{S}{E}		{ return new Symbol(TokenConstants.BOOL_CONST, new Boolean(false)); }
+<YYINITIAL> \"            {  string_buf.delete(0, string_buf.length()); 
+                             is_closed = false; is_escaped = false;
+                             string_buf_ptr = 0; 
+                             yybegin(STRING); }
 
-<YYINITIAL>TYPEID			{ 
-              AbstractSymbol typeid = AbstractTable.stringtable.addString(yytext());
-              return new Symbol(TokenConstants.TYPEID, typeid); }
-<YYINITIAL>OBJID                        { 
-              AbstractSymbol objid = AbstractTable.stringtable.addString(yytext());
-              return new Symbol(TokenConstants.OBJECTID, objid); }
-<YYINITIAL>INTEGER			{ 
-              AbstractSymbol integer = AbstractTable.stringtable.addString(yytext());
-              return new Symbol(TokenConstants.INT_CONST, integer); }
+<YYINITIAL>"(*"            { yybegin(COMMENTa); nest = 1; }
+<YYINITIAL>"--"            { yybegin(COMMENTb); }
 
-<YYINITIAL>"=>"			{ return new Symbol(TokenConstants.DARROW); }
-<YYINITIAL>"+"			{ return new Symbol(TokenConstants.PLUS); }
-<YYINITIAL>"/"			{ return new Symbol(TokenConstants.DIV); }
-<YYINITIAL>"-"			{ return new Symbol(TokenConstants.MINUS); }
-<YYINITIAL>"*"			{ return new Symbol(TokenConstants.MULT); }
-<YYINITIAL>"="			{ return new Symbol(TokenConstants.EQ); }
-<YYINITIAL>"<"			{ return new Symbol(TokenConstants.LT); } 
-<YYINITIAL>"."                  { return new Symbol(TokenConstants.DOT); }
-<YYINITIAL>"~"                  { return new Symbol(TokenConstants.NEG); }
-<YYINITIAL>","			{ return new Symbol(TokenConstants.COMMA); }
-<YYINITIAL>";"			{ return new Symbol(TokenConstants.SEMI); }
-<YYINITIAL>":"                  { return new Symbol(TokenConstants.COLON); } 
-<YYINITIAL>"("                  { return new Symbol(TokenConstants.LPAREN); } 
-<YYINITIAL>")"                  { return new Symbol(TokenConstants.RPAREN); } 
-<YYINITIAL>"@"                  { return new Symbol(TokenConstants.AT); }
-<YYINITIAL>"{"                  { return new Symbol(TokenConstants.LBRACE); } 
-<YYINITIAL>"}"                  { return new Symbol(TokenConstants.RBRACE); } 
+<COMMENTa>"*)"             { nest--; if (nest==0) { yybegin(YYINITIAL); } }
+<COMMENTa>"(*"             { nest++; }
+<COMMENTa>[^\*\(\)\n]*     { /* eat comment in chunks */ }
+<COMMENTa>[\(\)\*]         { }
+<COMMENTa>\n               { curr_lineno++; }
 
-<YYINITIAL>{NONEWLINE_WS}       {  }
-<YYINITIAL>{EOL}		{ if (yytext().contains("\n")) curr_lineno++; }
 
-.                               {
-                                  System.err.println("LEXER BUG - UNMATCHED: " + yytext()); }
+<COMMENTb>\n               { curr_lineno++; yybegin(YYINITIAL); }
+<COMMENTb>.*               { }
+
+
+<STRING>\"                {  yybegin(YYINITIAL); 
+                             AbstractSymbol stringid = AbstractTable.stringtable.addString(string_buf.toString());
+                             return new Symbol(TokenConstants.STR_CONST, stringid); 
+                          }
+
+<STRING>[^\"\n]*[\"\n]    {
+    if (!is_closed) {
+        int len = 0;
+        while (yytext().charAt(len) != '\n' && yytext().charAt(len) != '\"') { len++; }
+
+        int yy_idx = 0;
+        for (yy_idx = 0; yy_idx < len+1; yy_idx++) {
+            if (yytext().charAt(yy_idx) == '\"' && !is_escaped) { 
+                is_closed = true; 
+                break; 
+            }
+            if (yytext().charAt(yy_idx) == '\0') { 
+                yybegin(YYINITIAL); 
+                return new Symbol(TokenConstants.ERROR, "String contains null character"); 
+            }
+            if (yytext().charAt(yy_idx) == '\\' && !is_escaped) {
+                string_buf.append(yytext().charAt(yy_idx));
+                is_escaped = true;
+                continue; 
+            }
+            if (is_escaped) {
+                switch (yytext().charAt(yy_idx)) {
+                    case 'b': string_buf.setCharAt(string_buf_ptr++, '\b'); break;
+                    case 'f': string_buf.setCharAt(string_buf_ptr++, '\f'); break;
+                    case 'n': string_buf.setCharAt(string_buf_ptr++, '\n'); break;
+                    case 't': string_buf.setCharAt(string_buf_ptr++, '\t'); break;
+                    case '\"': string_buf.setCharAt(string_buf_ptr++, '\"'); break;
+                    default: string_buf.setCharAt(string_buf_ptr++, yytext().charAt(yy_idx)); break; 
+                }
+                is_escaped = false;
+            } else {
+                if(yytext().charAt(yy_idx) == '\n') { 
+                    curr_lineno++;
+                    //string_buf_ptr = 0;
+                    yybegin(YYINITIAL);
+                    return new Symbol(TokenConstants.ERROR, "Unterminated string constant");
+                }
+                string_buf.append(yytext().charAt(yy_idx)); 
+                string_buf_ptr++;
+            }
+        } 
+    } 
+    if (is_closed) {
+        yybegin(YYINITIAL);
+        //string_buf_ptr = 0;
+        int len = string_buf.length() + 1;
+        if (len > MAX_STR_CONST) { return new Symbol(TokenConstants.ERROR, "String constant too long"); }
+        AbstractSymbol strid = AbstractTable.stringtable.addString(string_buf.toString());
+        return new Symbol(TokenConstants.STR_CONST, strid);
+    }
+}
+
+<STRING>[^\"\n\0]*                                 { /* Eat the line when the it is followed by EOF */ }
+
+
+<YYINITIAL>{WS}                                    {}
+<YYINITIAL>"+"                                     { return new Symbol(TokenConstants.PLUS); }
+<YYINITIAL>"/"                                     { return new Symbol(TokenConstants.DIV); }
+<YYINITIAL>"-"                                     { return new Symbol(TokenConstants.MINUS); }
+<YYINITIAL>"*"                                     { return new Symbol(TokenConstants.MULT); }
+<YYINITIAL>"="                                     { return new Symbol(TokenConstants.EQ); }
+<YYINITIAL>"<"                                     { return new Symbol(TokenConstants.LT); }
+<YYINITIAL>"."                                     { return new Symbol(TokenConstants.DOT); }
+<YYINITIAL>"~"                                     { return new Symbol(TokenConstants.NEG); }
+<YYINITIAL>","                                     { return new Symbol(TokenConstants.COMMA); }
+<YYINITIAL>";"                                     { return new Symbol(TokenConstants.SEMI); }
+<YYINITIAL>":"                                     { return new Symbol(TokenConstants.COLON); }
+<YYINITIAL>"("                                     { return new Symbol(TokenConstants.LPAREN); }
+<YYINITIAL>")"                                     { return new Symbol(TokenConstants.RPAREN); }
+<YYINITIAL>"@"                                     { return new Symbol(TokenConstants.AT); }
+<YYINITIAL>"{"                                     { return new Symbol(TokenConstants.LBRACE); }
+<YYINITIAL>"}"                                     { return new Symbol(TokenConstants.RBRACE); }
+<YYINITIAL>"<="                                    { return new Symbol(TokenConstants.LE); }
+<YYINITIAL>"<-"                                    { return new Symbol(TokenConstants.ASSIGN); }
+<YYINITIAL>"=>"                                    { return new Symbol(TokenConstants.DARROW); }
+
+<YYINITIAL>[Cc][Ll][Aa][Ss][Ss]                    { return new Symbol(TokenConstants.CLASS); }
+<YYINITIAL>[Ee][Ll][Ss][Ee]                        { return new Symbol(TokenConstants.ELSE); }
+<YYINITIAL>[Ff][Ii]                                { return new Symbol(TokenConstants.FI); }
+<YYINITIAL>[Ii][Ff]                                { return new Symbol(TokenConstants.IF); }
+<YYINITIAL>[Ii][Nn]                                { return new Symbol(TokenConstants.IN); }
+<YYINITIAL>[Ii][Nn][Hh][Ee][Rr][Ii][Tt][Ss]        { return new Symbol(TokenConstants.INHERITS); }
+<YYINITIAL>[Ll][Ee][Tt]                            { return new Symbol(TokenConstants.LET); }
+<YYINITIAL>[Ll][Oo][Oo][Pp]                        { return new Symbol(TokenConstants.LOOP); }
+<YYINITIAL>[Pp][Oo][Oo][Ll]                        { return new Symbol(TokenConstants.POOL); }
+<YYINITIAL>[Tt][Hh][Ee][Nn]                        { return new Symbol(TokenConstants.THEN); }
+<YYINITIAL>[Ww][Hh][Ii][Ll][Ee]                    { return new Symbol(TokenConstants.WHILE); }
+<YYINITIAL>[Cc][Aa][Ss][Ee]                        { return new Symbol(TokenConstants.CASE); }
+<YYINITIAL>[Ee][Ss][Aa][Cc]                        { return new Symbol(TokenConstants.ESAC); }
+<YYINITIAL>[Oo][Ff]                                { return new Symbol(TokenConstants.OF); }
+<YYINITIAL>[Nn][Ee][Ww]                            { return new Symbol(TokenConstants.NEW); }
+<YYINITIAL>[Nn][Oo][Tt]                            { return new Symbol(TokenConstants.NOT); }
+<YYINITIAL>[Ii][Ss][Vv][Oo][Ii][Dd]                { return new Symbol(TokenConstants.ISVOID); }
+<YYINITIAL>"*)"                                    { return new Symbol(TokenConstants.ERROR, "Unmatched *)"); }
+
+<YYINITIAL>[0-9]+                                  { AbstractSymbol integer = AbstractTable.inttable.addString(yytext());
+                                                     return new Symbol(TokenConstants.INT_CONST, integer); }
+<YYINITIAL>t[Rr][Uu][Ee]                           { return new Symbol(TokenConstants.BOOL_CONST, new Boolean(true)); }
+<YYINITIAL>f[Aa][Ll][Ss][Ee]                       { return new Symbol(TokenConstants.BOOL_CONST, new Boolean(false)); }
+
+<YYINITIAL>[A-Z][A-Za-z0-9_]*                      { AbstractSymbol typeid = AbstractTable.idtable.addString(yytext());
+                                                     return new Symbol(TokenConstants.TYPEID, typeid); }
+<YYINITIAL>[a-z][A-Za-z0-9_]*                      { AbstractSymbol objid = AbstractTable.idtable.addString(yytext());
+                                                     return new Symbol(TokenConstants.OBJECTID, objid); }
+
+<YYINITIAL>[\r\n(\r\n)]                            { curr_lineno++; }
+.                                                  { return new Symbol(TokenConstants.ERROR, yytext()); }
