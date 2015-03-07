@@ -70,17 +70,17 @@ nonterminal class_c class;
 nonterminal Features dummy_feature_list;
 
    /* My definitions */
-nonterminal Features feature_list;
+nonterminal Features features;
 nonterminal Features attr;
 nonterminal Features method;
 nonterminal Formals dummy_formal_list;
-nonterminal Formals formal_list;
+nonterminal Formals formals;
 nonterminal Formal formal;
 nonterminal Expression expr;
-nonterminal Expression let_list;
+nonterminal Expression let_expr;
 nonterminal Expressions rep_exprs;
 nonterminal Expressions exprs;
-nonterminal Expressions block_exprs;
+nonterminal Expressions exprs_semi;
 nonterminal Case_ branch;
 nonterminal Cases cases;
 
@@ -128,23 +128,72 @@ dummy_feature_list
 	    {: RESULT = new Features(curr_lineno()); :}
 	;
 
-
+/* Formal and Formals */
+formal
+        ::= OBJECTID:a1 COLON TYPEID:a2
+            {: RESULT = new formalc(curr_lineno(), a1, a2); :}
+        ;
+formals 
+        ::= formal:a1
+            {: RESULT = new Formals(curr_lineno()).appendElement(a1); :}
+        | formals:a1 formal:a2
+            {: RESULT = a1.appendElement(a2); :}
+        ;
 /* Expression */
 
 expr   
         ::= OBJECTID:a1 ASSIGN expr:a2
             {: RESULT = new assign(curr_lineno(), a1, a2); :}
+        /* Dispatch  */
         | expr:a1 DOT OBJECTID:a2 LPAREN rep_exprs:a3 RPAREN
             {: RESULT = new dispatch(curr_lineno(), a1, a2, a3); :}
         | expr:a1 AT TYPEID:a2 DOT OBJECTID:a3 LPAREN rep_exprs:a4 RPAREN
             {: RESULT = new static_dispatch(curr_lineno(), a1, a2, a3, a4); :}
+        | OBJECTID:a1 LPAREN rep_exprs:a2 RPAREN
+            {: AbstractSymbol self = AbstractTable.idtable.addString("self");
+               RESULT = new dispatch(curr_lineno(), new object(curr_lineno(), self), a1, a2); :}
+        /* if else then */
+        | IF expr:a1 THEN expr:a2 ELSE expr:a3 FI
+            {: RESULT = new cond(curr_lineno(), a1, a2, a3); :}
+        /* while loop pool */
+        | WHILE expr:a1 LOOP expr:a2 POOL
+            {: RESULT = new loop(curr_lineno(), a1, a2); :}
+        /* block */
+        | LBRACE exprs_semi:a1 RBRACE
+            {: RESULT = new block(curr_lineno(), a1); :}
+        /* let in */
+        | LET let_expr:a1
+            {: RESULT = a1; :}
+     
+
         ;
+
+
+let_expr
+        ::= OBJECTID:a1 COLON TYPEID:a2 IN expr:a4
+            {: RESULT = new let(curr_lineno(), a1, a2, new no_expr(curr_lineno()), a4); :}
+        | OBJECTID:a1 COLON TYPEID:a2 COMMA let_expr:a4
+            {: RESULT = new let(curr_lineno(), a1, a2, new no_expr(curr_lineno()), a4); :}
+        | OBJECTID:a1 COLON TYPEID:a2 ASSIGN expr:a3 IN expr:a4
+            {: RESULT = new let(curr_lineno(), a1, a2, a3, a4); :}
+        | OBJECTID:a1 COLON TYPEID:a2 ASSIGN expr:a3 COMMA let_expr:a4
+            {: RESULT = new let(curr_lineno(), a1, a2, a3, a4); :}
+        ;
+         
+exprs_semi
+        ::= expr:a1 SEMI
+            {: RESULT = new Expressions(curr_lineno()).appendElement(a1); :}
+        | exprs_semi:a1 expr:a2 SEMI
+            {: RESULT = a1.appendElement(a2); :}
+        ;
+
 rep_exprs
         ::= expr:a1
             {: RESULT = new Expressions(curr_lineno()).appendElement(a1); :}
         | rep_exprs:a1 COMMA expr:a2
             {: RESULT = a1.appendElement(a2); :}
         ;
+
 
 
 
