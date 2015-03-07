@@ -81,8 +81,8 @@ nonterminal Expression let_expr;
 nonterminal Expressions rep_exprs;
 nonterminal Expressions exprs;
 nonterminal Expressions exprs_semi;
-nonterminal Case_ branch;
-nonterminal Cases cases;
+nonterminal Case branch;
+nonterminal Cases exprs_case_branch;
 
 
 /* Precedence declarations go here. */
@@ -164,10 +164,53 @@ expr
         /* let in */
         | LET let_expr:a1
             {: RESULT = a1; :}
-     
-
+        | CASE expr:a1 OF exprs_case_branch:a2 ESAC
+            {: RESULT = new typcase(curr_lineno(), a1, a2); :}
+        | NEW TYPEID:a1
+            {: RESULT = new new_(curr_lineno(), a1); :}
+        | ISVOID expr:a1
+            {: RESULT = new isvoid(curr_lineno(), a1); :}
+        | expr:a1 PLUS expr:a2
+            {: RESULT = new plus(curr_lineno(), a1, a2); :}
+        | expr:a1 MINUS expr:a2
+            {: RESULT = new sub(curr_lineno(), a1, a2); :}
+        | expr:a1 MULT expr:a2
+            {: RESULT = new mul(curr_lineno(), a1, a2); :}
+        | expr:a1 DIV expr:a2
+            {: RESULT = new divide(curr_lineno(), a1, a2); :}
+        | NEG expr:a1
+            {: RESULT = new neg(curr_lineno(), a1); :}
+        | expr:a1 LT expr:a2
+            {: RESULT = new lt(curr_lineno(), a1, a2); :}
+        | expr:a1 LE expr:a2
+            {: RESULT = new leq(curr_lineno(), a1, a2); :}
+        | expr:a1 EQ expr:a2
+            {: RESULT = new eq(curr_lineno(), a1, a2); :}
+        | NOT expr:a1
+            {: RESULT = new comp(curr_lineno(), a1); :}
+        | LPAREN expr:a1 RPAREN
+            {: RESULT = a1; :}
+        | OBJECTID:a1
+            {: RESULT = new object(curr_lineno(), a1); :}
+        | INT_CONST:a1
+            {: RESULT = new int_const(curr_lineno(), a1); :}
+        | STR_CONST:a1
+            {: RESULT = new string_const(curr_lineno(), a1); :}
+        | BOOL_CONST:a1
+            {: RESULT = new bool_const(curr_lineno(), a1); :}
         ;
 
+exprs_case_branch
+        ::= branch:a1
+            {: RESULT = new Cases(curr_lineno()).appendElement(a1); :}
+        | exprs_case_branch:a1 branch:a2
+            {: RESULT = a1.appendElement(a2); :}
+        ;
+
+branch
+        ::= OBJECTID:a1 COLON TYPEID:a2 DARROW expr:a3 SEMI
+            {: RESULT = new branch(curr_lineno(), a1, a2, a3); :}
+        ;
 
 let_expr
         ::= OBJECTID:a1 COLON TYPEID:a2 IN expr:a4
