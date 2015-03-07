@@ -69,7 +69,33 @@ nonterminal Classes class_list;
 nonterminal class_c class;
 nonterminal Features dummy_feature_list;
 
+   /* My definitions */
+nonterminal Features feature_list;
+nonterminal Features attr;
+nonterminal Features method;
+nonterminal Formals dummy_formal_list;
+nonterminal Formals formal_list;
+nonterminal Formal formal;
+nonterminal Expression expr;
+nonterminal Expression let_list;
+nonterminal Expressions rep_exprs;
+nonterminal Expressions exprs;
+nonterminal Expressions block_exprs;
+nonterminal Case_ branch;
+nonterminal Cases cases;
+
+
 /* Precedence declarations go here. */
+precedence left ASSIGN;
+precedence left NOT;
+precedence left LE, LT, EQ;
+precedence left PLUS, MINUS;
+precedence left MULT, DIV;
+precedence left ISVOID;
+precedence left NEG;
+precedence left AT;
+precedence left DOT;
+
 
 program	
 	::= class_list:cl
@@ -96,7 +122,31 @@ class
 	;
 
 /* Feature list may be empty, but no empty features in list. */
+
 dummy_feature_list
 	::= /* empty */
 	    {: RESULT = new Features(curr_lineno()); :}
 	;
+
+
+/* Expression */
+
+expr   
+        ::= OBJECTID:a1 ASSIGN expr:a2
+            {: RESULT = new assign(curr_lineno(), a1, a2); :}
+        | expr:a1 DOT OBJECTID:a2 LPAREN rep_exprs:a3 RPAREN
+            {: RESULT = new dispatch(curr_lineno(), a1, a2, a3); :}
+        | expr:a1 AT TYPEID:a2 DOT OBJECTID:a3 LPAREN rep_exprs:a4 RPAREN
+            {: RESULT = new static_dispatch(curr_lineno(), a1, a2, a3, a4); :}
+        ;
+rep_exprs
+        ::= expr:a1
+            {: RESULT = new Expressions(curr_lineno()).appendElement(a1); :}
+        | rep_exprs:a1 COMMA expr:a2
+            {: RESULT = a1.appendElement(a2); :}
+        ;
+
+
+
+
+
