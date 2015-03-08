@@ -143,6 +143,8 @@ formal
 formals 
         ::= /* empty */
             {: RESULT = new Formals(curr_lineno()); :}
+        | formal:a1
+            {: RESULT = new Formals(curr_lineno()).appendElement(a1); :}
         | formals:a1 COMMA formal:a2
             {: RESULT = a1.appendElement(a2); :}
         ;
@@ -205,6 +207,9 @@ expr
             {: RESULT = new string_const(curr_lineno(), a1); :}
         | BOOL_CONST:a1
             {: RESULT = new bool_const(curr_lineno(), a1); :}
+        /* for test
+            {: RESULT = new no_expr(curr_lineno()); :}
+        */
         ;
 
 exprs_case_branch
@@ -231,15 +236,17 @@ let_expr
         ;
          
 exprs_semi
-        ::= /* empty */
-            {: RESULT = new Expressions(curr_lineno()); :}
-        | exprs_semi:a1 SEMI expr:a2
+        ::= expr:a1 SEMI
+            {: RESULT = new Expressions(curr_lineno()).appendElement(a1); :}
+        | exprs_semi:a1 expr:a2 SEMI
             {: RESULT = a1.appendElement(a2); :}
         ;
 
 rep_exprs
         ::= /* empty */
             {: RESULT = new Expressions(curr_lineno()); :}
+        | expr:a1
+            {: RESULT = new Expressions(curr_lineno()).appendElement(a1); :}
         | rep_exprs:a1 COMMA expr:a2
             {: RESULT = a1.appendElement(a2); :}
         ;
