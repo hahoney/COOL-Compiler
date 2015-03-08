@@ -78,7 +78,7 @@ nonterminal Expression expr;
 nonterminal Expression let_expr;
 nonterminal Expressions rep_exprs;
 nonterminal Expressions exprs;
-nonterminal Expressions exprs_semi;
+nonterminal Expressions exprs_block;
 nonterminal Case branch;
 nonterminal Cases exprs_case_branch;
 
@@ -86,7 +86,7 @@ nonterminal Cases exprs_case_branch;
 /* Precedence declarations go here. */
 precedence left ASSIGN;
 precedence left NOT;
-precedence left LE, LT, EQ;
+precedence nonassoc LE, LT, EQ;
 precedence left PLUS, MINUS;
 precedence left MULT, DIV;
 precedence left ISVOID;
@@ -107,6 +107,8 @@ class_list
 	/* several classes */
 	| class_list:cl class:c
 	    {: RESULT = cl.appendElement(c); :}
+        | class_list:cl error
+            {: RESULT = cl; :}
 	;
 
 /* If no parent is specified, the class inherits from the Object class */
@@ -117,6 +119,11 @@ class
 				   f, curr_filename()); :}
 	| CLASS TYPEID:n INHERITS TYPEID:p LBRACE features:f RBRACE SEMI
 	    {: RESULT = new class_c(curr_lineno(), n, p, f, curr_filename()); :}
+        /* Handling errors */
+        | CLASS error LBRACE features:f RBRACE SEMI
+            {: RESULT = null; :}
+        | CLASS TYPEID:n INHERITS error LBRACE features:f RBRACE SEMI
+            {: RESULT = null; :}
 	;
 
 /* Feature list may be empty, but no empty features in list. */
@@ -124,7 +131,11 @@ features
         ::= /* empty */
             {: RESULT = new Features(curr_lineno()); :}
         | features:a1 feature:a2 SEMI
-            {: RESULT = a1.appendElement(a2); :}
+            {: if (a1 != null) { RESULT = a1.appendElement(a2); }
+               else { RESULT = new Features(curr_lineno()).appendElement(a2); } :}
+        /* handle error */
+        | error:e SEMI
+            {: RESULT = null; :}
         ;
 feature 
         ::= OBJECTID:a1 LPAREN formals:a2 RPAREN COLON TYPEID:a3 LBRACE expr:a4 RBRACE
@@ -168,7 +179,7 @@ expr
         | WHILE expr:a1 LOOP expr:a2 POOL
             {: RESULT = new loop(curr_lineno(), a1, a2); :}
         /* block */
-        | LBRACE exprs_semi:a1 RBRACE
+        | LBRACE exprs_block:a1 RBRACE
             {: RESULT = new block(curr_lineno(), a1); :}
         /* let in */
         | LET let_expr:a1
@@ -233,13 +244,21 @@ let_expr
             {: RESULT = new let(curr_lineno(), a1, a2, a3, a4); :}
         | OBJECTID:a1 COLON TYPEID:a2 ASSIGN expr:a3 COMMA let_expr:a4
             {: RESULT = new let(curr_lineno(), a1, a2, a3, a4); :}
+        /* error handle */
+        | error IN expr 
+            {: RESULT = null; :}
+        | error COMMA let_expr:a4
+            {: RESULT = a4; :}
         ;
          
-exprs_semi
+exprs_block
         ::= expr:a1 SEMI
             {: RESULT = new Expressions(curr_lineno()).appendElement(a1); :}
-        | exprs_semi:a1 expr:a2 SEMI
-            {: RESULT = a1.appendElement(a2); :}
+        | exprs_block:a1 expr:a2 SEMI
+            {: if (a1 != null) { RESULT = a1.appendElement(a2); } 
+               else { RESULT = new Expressions(curr_lineno()).appendElement(a2); } :}
+        | error SEMI
+            {: RESULT = null; :}
         ;
 
 rep_exprs
