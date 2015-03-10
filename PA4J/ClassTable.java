@@ -10,7 +10,7 @@ class ClassTable {
     private PrintStream errorStream;
 
     private Map<AbstractSymbol, class_c> basicClassMap;
-    private List<class_c> classTableList;
+    private Map<AbstractSymbol, class_c> classTableMap;
 
     /** Creates data structures representing basic Cool classes (Object,
      * IO, Int, Bool, String).  Please note: as is this method does not
@@ -183,43 +183,66 @@ class ClassTable {
 	semantErrors = 0;
 	errorStream = System.err;
         basicClassMap = new HashMap<AbstractSymbol, class_c>();	
-        classTableList = new ArrayList<class_c>();
+        classTableMap = new HashMap<AbstractSymbol, class_c>();
 	/* fill this in */
         installBasicClasses();
-        classTableList = checkClasses(cls);
+        classTableMap = checkClasses(cls);
+        checkCycle();
     }
 
-    private List<class_c> checkClasses(Classes cls) {
-        Map<AbstractSymbol, class_c> classTableMap = new HashMap<AbstractSymbol, class_c>();
+    private void checkCycle() {
+        Set <AbstractSymbol> visited = new HashSet<AbstractSymbol>();
+        Set <AbstractSymbol> undefined = new HashSet<AbstractSymbol>();
+        for (AbstractSymbol key : classTableMap.keySet()) {
+            class_c curClass = classTableMap.get(key);
+            visited.clear();
+            visited.add(curClass.name);
+            while (!TreeConstants.Object_.equals(curClass.parent) &&
+                   !TreeConstants.IO.equals(curClass.parent)) {
+                if (!classTableMap.containsKey(curClass.parent)) {
+                    if (!undefined.contains(curClass.parent)) {
+                    undefined.add(curClass.parent);
+                    semantError(curClass).println("Class " + curClass.name.toString() + 
+                                                  " inherits from an undefined class " +
+                                                  curClass.parent.toString() + ".");
+                    }
+                    break;
+                } else if (visited.contains(curClass.parent)) {
+                    semantError(curClass).println("Class " + curClass.parent.toString() +
+                                                  ", or an ancestor of " + curClass.parent.toString() +
+                                                  ", is involved in an inheritance cycle.");
+                    break;
+                } else {
+                    curClass = classTableMap.get(curClass.parent);
+                    visited.add(curClass.name);
+                }
+            }     
+        }
+    }
+
+    private Map<AbstractSymbol, class_c> checkClasses(Classes cls) {
         class_c tempClass;
 	for (Enumeration e = cls.getElements(); e.hasMoreElements();) {
             tempClass = (class_c) e.nextElement();
             if (basicClassMap.containsKey(tempClass.name)) {
                 semantError(tempClass).println("Redefinition of basic class " + tempClass.name.toString() + ".");
-                break;
             }
             if (tempClass.parent.equals(TreeConstants.Int) || 
                 tempClass.parent.equals(TreeConstants.Bool) ||
                 tempClass.parent.equals(TreeConstants.Str)) {
-                semantError(tempClass).println("Class " + tempClass.name.toString() + " cannot inherit class Int.");
-                break;
+                semantError(tempClass).println("Class " + tempClass.name.toString() + " cannot inherit class " +
+                                               tempClass.parent.toString() + ".");
             }
             // missing parent is Object by default after parsing. No need to check
             if (classTableMap.containsKey(tempClass.name)) {
                 semantError(tempClass).println("Class " + tempClass.name.toString() + " was previously defined.");
-                break;
             }
             classTableMap.put(tempClass.name, tempClass);
         }
-        if (classTableMap.containsKey(TreeConstants.Main)) {
+        if (!classTableMap.containsKey(TreeConstants.Main)) {
             semantError().println("Class Main is not defined.");
         }
-        return new ArrayList<class_c>(classTableMap.values());
-    }
-
-    private void checkLoop() {
-        bool visited[];
-        return;
+        return classTableMap;
     }
 
     /** Prints line number and file name of the given class.
