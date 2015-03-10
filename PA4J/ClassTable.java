@@ -1,11 +1,16 @@
 import java.io.PrintStream;
+import java.util.*;
 
 /** This class may be used to contain the semantic information such as
  * the inheritance graph.  You may use it or not as you like: it is only
  * here to provide a container for the supplied methods.  */
 class ClassTable {
+    private AbstractSymbol filename;
     private int semantErrors;
     private PrintStream errorStream;
+
+    private Map<AbstractSymbol, class_c> basicClassMap;
+    private List<class_c> classTableList;
 
     /** Creates data structures representing basic Cool classes (Object,
      * IO, Int, Bool, String).  Please note: as is this method does not
@@ -166,7 +171,12 @@ class ClassTable {
 
 	/* Do somethind with Object_class, IO_class, Int_class,
            Bool_class, and Str_class here */
-
+        this.filename = filename;
+        basicClassMap.put(TreeConstants.Object_, Object_class);
+        basicClassMap.put(TreeConstants.IO, IO_class);
+        basicClassMap.put(TreeConstants.Int, Int_class);
+        basicClassMap.put(TreeConstants.Bool, Bool_class);
+        basicClassMap.put(TreeConstants.Str, Str_class);        
     }
 	
 
@@ -174,8 +184,31 @@ class ClassTable {
     public ClassTable(Classes cls) {
 	semantErrors = 0;
 	errorStream = System.err;
-	
+        basicClassMap = new HashMap<AbstractSymbol, class_c>();	
+        classTableList = new ArrayList<class_c>();
 	/* fill this in */
+        installBasicClasses();
+	for (Enumeration e = cls.getElements(); e.hasMoreElements();) {
+            class_c tempClass = (class_c) e.nextElement();
+            PrintStream ps = semantError(tempClass.filename, tempClass);
+            if (basicClassMap.containsKey(tempClass.name)) {
+                ps.println("Redefinition of basic class " + tempClass.name.toString() + ".");
+                break;
+            }
+            if (tempClass.parent.equals(TreeConstants.Int) || 
+                tempClass.parent.equals(TreeConstants.Bool) ||
+                tempClass.parent.equals(TreeConstants.Str)) {
+                ps.println("Class " + tempClass.name.toString() + " cannot inherit class Int.");
+                break;
+            }
+            if (tempClass.parent.equals(TreeConstants.No_class)) {
+                tempClass.parent = TreeConstants.Object_;
+            }
+
+                            
+            
+            classTableList.add(tempClass);
+        }
     }
 
     /** Prints line number and file name of the given class.
