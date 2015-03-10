@@ -178,8 +178,6 @@ class ClassTable {
         basicClassMap.put(TreeConstants.Bool, Bool_class);
         basicClassMap.put(TreeConstants.Str, Str_class);        
     }
-	
-
 
     public ClassTable(Classes cls) {
 	semantErrors = 0;
@@ -188,27 +186,40 @@ class ClassTable {
         classTableList = new ArrayList<class_c>();
 	/* fill this in */
         installBasicClasses();
+        classTableList = checkClasses(cls);
+    }
+
+    private List<class_c> checkClasses(Classes cls) {
+        Map<AbstractSymbol, class_c> classTableMap = new HashMap<AbstractSymbol, class_c>();
+        class_c tempClass;
 	for (Enumeration e = cls.getElements(); e.hasMoreElements();) {
-            class_c tempClass = (class_c) e.nextElement();
-            PrintStream ps = semantError(tempClass.filename, tempClass);
+            tempClass = (class_c) e.nextElement();
             if (basicClassMap.containsKey(tempClass.name)) {
-                ps.println("Redefinition of basic class " + tempClass.name.toString() + ".");
+                semantError(tempClass).println("Redefinition of basic class " + tempClass.name.toString() + ".");
                 break;
             }
             if (tempClass.parent.equals(TreeConstants.Int) || 
                 tempClass.parent.equals(TreeConstants.Bool) ||
                 tempClass.parent.equals(TreeConstants.Str)) {
-                ps.println("Class " + tempClass.name.toString() + " cannot inherit class Int.");
+                semantError(tempClass).println("Class " + tempClass.name.toString() + " cannot inherit class Int.");
                 break;
             }
-            if (tempClass.parent.equals(TreeConstants.No_class)) {
-                tempClass.parent = TreeConstants.Object_;
+            // missing parent is Object by default after parsing. No need to check
+            if (classTableMap.containsKey(tempClass.name)) {
+                semantError(tempClass).println("Class " + tempClass.name.toString() + " was previously defined.");
+                break;
             }
-
-                            
-            
-            classTableList.add(tempClass);
+            classTableMap.put(tempClass.name, tempClass);
         }
+        if (classTableMap.containsKey(TreeConstants.Main)) {
+            semantError().println("Class Main is not defined.");
+        }
+        return new ArrayList<class_c>(classTableMap.values());
+    }
+
+    private void checkLoop() {
+        bool visited[];
+        return;
     }
 
     /** Prints line number and file name of the given class.
