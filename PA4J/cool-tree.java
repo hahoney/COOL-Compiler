@@ -28,7 +28,8 @@ abstract class Class_ extends TreeNode {
         super(lineNumber);
     }
     public abstract void dump_with_types(PrintStream out, int n);
-
+    // Yi Zhang
+    public abstract void semant(ClassTable classtable);
 }
 
 
@@ -65,7 +66,7 @@ abstract class Feature extends TreeNode {
         super(lineNumber);
     }
     public abstract void dump_with_types(PrintStream out, int n);
-
+    public abstract void semant(ClassTable classTable, SymbolTable symbolTable, class_c curClass);
 }
 
 
@@ -102,7 +103,8 @@ abstract class Formal extends TreeNode {
         super(lineNumber);
     }
     public abstract void dump_with_types(PrintStream out, int n);
-
+    public abstract AbstractSymbol getName();
+    public abstract AbstractSymbol getType();
 }
 
 
@@ -265,8 +267,12 @@ class programc extends Program {
     public void semant() {
 	/* ClassTable constructor may do some semantic analysis */
 	ClassTable classTable = new ClassTable(classes);
-	
+        int typeError = 0;	
+
 	/* some semantic analysis code may go here */
+        for (Enumeration e = classes.getElements(); e.hasMoreElements();) {
+            ((Class_) e.nextElement()).semant(classTable);
+        }
 
 	if (classTable.errors()) {
 	    System.err.println("Compilation halted due to static semantic errors.");
@@ -330,6 +336,17 @@ class class_c extends Class_ {
         out.println(Utilities.pad(n + 2) + ")");
     }
 
+    /* type check by Yi Zhang*/
+    @Override
+    public void semant(ClassTable classTable) {
+        SymbolTable symbolTable = new SymbolTable();
+        
+        for (Enumeration e = features.getElements(); e.hasMoreElements();) {
+            symbolTable.enterScope();
+            ((Feature)e.nextElement()).semant(classTable, symbolTable, this);
+            symbolTable.exitScope();
+        }
+    }
 }
 
 
@@ -379,6 +396,32 @@ class method extends Feature {
 	expr.dump_with_types(out, n + 2);
     }
 
+    /* feature.method type checking by Yi Zhang */
+    public void semant(ClassTable classTable, SymbolTable symbolTable, class_c curClass) {
+        Formal formal;
+        symbolTable.enterScope();
+        for (Enumeration e = formals.getElements(); e.hasMoreElements();) {
+            formal = (Formal)e.nextElement(); 
+            if (classTable.hasType(formal.getType())) {
+                if (symbolTable.probe(formal.getName()) != null) {
+                    classTable.semantError(curClass).println(
+                       "Formal parameter " + formal.getName().toString() + " is multiply defined.");
+                }
+                symbolTable.addId(formal.getName(), formal.getType());
+            } else {
+                classTable.semantError(curClass).println(
+                       "Class " + curClass.name.toString() + " of formal parameter " + 
+                       formal.getName().toString() + " is undefined.");
+            }
+        }
+        AbstractSymbol exprType = TreeConstants.Int; //expr.semant(classTable, symbolTable, curClass);
+        symbolTable.exitScope();
+        if (!classTable.isSubtype(exprType, return_type)) {
+            classTable.semantError(curClass).println("Inferred return type " + 
+                       exprType.toString() + " of method " + name.toString() + 
+                       " does not conform to declared return type " + return_type.toString() + ".");
+        }
+    }
 }
 
 
@@ -421,6 +464,10 @@ class attr extends Feature {
 	init.dump_with_types(out, n + 2);
     }
 
+    public void semant(ClassTable classTable, SymbolTable symbolTable, class_c curClass) {
+        // TODO
+    }
+
 }
 
 
@@ -457,7 +504,14 @@ class formalc extends Formal {
         dump_AbstractSymbol(out, n + 2, name);
         dump_AbstractSymbol(out, n + 2, type_decl);
     }
-
+    /* Yi Zhang */
+    public AbstractSymbol getName() {
+        return name;
+    }
+    
+    public AbstractSymbol getType() {
+        return type_decl;
+    }
 }
 
 

@@ -190,6 +190,23 @@ class ClassTable {
         checkCycle();
     }
 
+    public boolean hasType(AbstractSymbol type) {
+        return basicClassMap.containsKey(type) || classTableMap.containsKey(type);
+    }
+
+    public boolean isSubtype(AbstractSymbol sub, AbstractSymbol ancestor) {
+        assert(hasType(sub) && hasType(ancestor));
+        if (ancestor.equals(sub)) { return true; }
+        if (ancestor.equals(TreeConstants.Object_)) { return true; }
+        if (basicClassMap.containsKey(sub)) { return false; }
+
+        while (!sub.equals(TreeConstants.Object_)) {
+            if (sub.equals(ancestor)) { return true; }
+            else { sub = classTableMap.get(sub).parent; }
+        }
+        return false; 
+    }
+
     private void checkCycle() {
         Set <AbstractSymbol> visited = new HashSet<AbstractSymbol>();
         Set <AbstractSymbol> undefined = new HashSet<AbstractSymbol>();
