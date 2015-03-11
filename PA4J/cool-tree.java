@@ -340,12 +340,21 @@ class class_c extends Class_ {
     @Override
     public void semant(ClassTable classTable) {
         SymbolTable symbolTable = new SymbolTable();
+        symbolTable.enterScope();
+        for (Enumeration e = features.getElements(); e.hasMoreElements();) {
+            Feature f = (Feature) e.nextElement();
+            if (f instanceof attr) {
+                f.semant(classTable, symbolTable, this);
+            }
+        }
         
         for (Enumeration e = features.getElements(); e.hasMoreElements();) {
-            symbolTable.enterScope();
-            ((Feature)e.nextElement()).semant(classTable, symbolTable, this);
-            symbolTable.exitScope();
+            Feature f = (Feature) e.nextElement();
+            if (f instanceof method) {
+                f.semant(classTable, symbolTable, this);
+            }
         }
+        symbolTable.exitScope();
     }
 }
 
@@ -463,11 +472,21 @@ class attr extends Feature {
         dump_AbstractSymbol(out, n + 2, type_decl);
 	init.dump_with_types(out, n + 2);
     }
-
+   
+    @Override
     public void semant(ClassTable classTable, SymbolTable symbolTable, class_c curClass) {
-        // TODO
+        // no need to enter new scope
+        if (symbolTable.probe(name) != null) {
+            classTable.semantError(curClass).println("Attribute " + name.toString() +" is multiply defined in class.");
+        }
+        if (!classTable.hasType(type_decl)) {;
+            classTable.semantError(curClass).println("Class " + type_decl.toString() + 
+                                                     " of attribute " + name.toString() + " is undefined.");
+        }
+        if (symbolTable.probe(name) == null && classTable.hasType(type_decl)) {
+            symbolTable.addId(name, type_decl);
+        } 
     }
-
 }
 
 

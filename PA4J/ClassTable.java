@@ -169,6 +169,15 @@ class ClassTable {
 					      new no_expr(0))),
 		       filename);
 
+        /* Definition of SELF_TYPE */
+        class_c Self_class = 
+            new class_c (0, TreeConstants.SELF_TYPE, 
+                            TreeConstants.Object_,
+                            new Features(0),
+                            filename
+            );
+
+
 	/* Do somethind with Object_class, IO_class, Int_class,
            Bool_class, and Str_class here */
         this.filename = filename;
@@ -176,7 +185,15 @@ class ClassTable {
         basicClassMap.put(TreeConstants.IO, IO_class);
         basicClassMap.put(TreeConstants.Int, Int_class);
         basicClassMap.put(TreeConstants.Bool, Bool_class);
-        basicClassMap.put(TreeConstants.Str, Str_class);        
+        basicClassMap.put(TreeConstants.Str, Str_class); 
+        basicClassMap.put(TreeConstants.SELF_TYPE, Self_class);       
+
+        //classTableMap.put(TreeConstants.Object_, Object_class);
+        classTableMap.put(TreeConstants.IO, IO_class);
+        classTableMap.put(TreeConstants.Int, Int_class);
+        classTableMap.put(TreeConstants.Bool, Bool_class);
+        classTableMap.put(TreeConstants.Str, Str_class); 
+        classTableMap.put(TreeConstants.SELF_TYPE, Self_class);  
     }
 
     public ClassTable(Classes cls) {
@@ -246,7 +263,8 @@ class ClassTable {
             }
             if (tempClass.parent.equals(TreeConstants.Int) || 
                 tempClass.parent.equals(TreeConstants.Bool) ||
-                tempClass.parent.equals(TreeConstants.Str)) {
+                tempClass.parent.equals(TreeConstants.Str) ||
+                tempClass.parent.equals(TreeConstants.SELF_TYPE)) {
                 semantError(tempClass).println("Class " + tempClass.name.toString() + " cannot inherit class " +
                                                tempClass.parent.toString() + ".");
             }
