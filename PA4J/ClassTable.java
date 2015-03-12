@@ -186,8 +186,8 @@ class ClassTable {
         basicClassMap.put(TreeConstants.Int, Int_class);
         basicClassMap.put(TreeConstants.Bool, Bool_class);
         basicClassMap.put(TreeConstants.Str, Str_class); 
-        basicClassMap.put(TreeConstants.SELF_TYPE, Self_class);       
-
+        basicClassMap.put(TreeConstants.SELF_TYPE, Self_class); 
+     
         //classTableMap.put(TreeConstants.Object_, Object_class);
         classTableMap.put(TreeConstants.IO, IO_class);
         classTableMap.put(TreeConstants.Int, Int_class);
