@@ -11,6 +11,7 @@ class ClassTable {
 
     private Map<AbstractSymbol, class_c> basicClassMap;
     private Map<AbstractSymbol, class_c> classTableMap;
+    private Map<AbstractSymbol, Features>featureTableMap;
 
     /** Creates data structures representing basic Cool classes (Object,
      * IO, Int, Bool, String).  Please note: as is this method does not
@@ -201,6 +202,7 @@ class ClassTable {
 	errorStream = System.err;
         basicClassMap = new HashMap<AbstractSymbol, class_c>();	
         classTableMap = new HashMap<AbstractSymbol, class_c>();
+        featureTableMap = new HashMap<AbstractSymbol, Features>();
 	/* fill this in */
         installBasicClasses();
         classTableMap = checkClasses(cls);
@@ -222,6 +224,38 @@ class ClassTable {
             else { sub = classTableMap.get(sub).parent; }
         }
         return false; 
+    }
+
+    public Feature getFeature(AbstractSymbol className, AbstractSymbol methodName) {
+        if (featureTableMap.containsKey(className)) {
+            Features methods = featureTableMap.get(className);
+            for (Enumeration e = methods.getElements(); e.hasMoreElements();) {
+                Feature method = (Feature) e.nextElement();
+                if (method.getName().equals(methodName)) {
+                    return method;
+                }
+            }
+        } 
+        return null; 
+    }
+
+    public void addFeature(Feature feature, class_c curClass) {
+        Features features;
+        if (!featureTableMap.containsKey(curClass.getName())) {
+            features = new Features(0);
+        } else {
+            features = featureTableMap.get(curClass.getName());
+        }
+        featureTableMap.put(curClass.getName(), features.appendElement(feature));
+    }
+
+    public void dumpFeatures() {
+        for (AbstractSymbol sym : featureTableMap.keySet()) {
+            for (Enumeration e = featureTableMap.get(sym).getElements(); e.hasMoreElements();) {
+                System.out.print(sym.toString() + "   ");
+                System.out.println(((Feature)e.nextElement()).getName());
+            }
+        }
     }
 
     private void checkCycle() {
