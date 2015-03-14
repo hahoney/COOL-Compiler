@@ -106,6 +106,7 @@ abstract class Formal extends TreeNode {
         super(lineNumber);
     }
     public abstract void dump_with_types(PrintStream out, int n);
+    public abstract void semant(ClassTable classTable, SymbolTable symbolTable, class_c curClass);
     public abstract AbstractSymbol getName();
     public abstract AbstractSymbol getType();
 }
@@ -437,33 +438,52 @@ class method extends Feature {
  
     @Override
     public void semant(ClassTable classTable, SymbolTable symbolTable, class_c curClass, boolean firstScan) {
-        Formal formal;
         symbolTable.enterScope();
-        for (Enumeration e = formals.getElements(); e.hasMoreElements();) {
-            formal = (Formal)e.nextElement(); 
-            if (classTable.hasType(formal.getType())) {
-                if (symbolTable.probe(formal.getName()) != null) {
-                    classTable.semantError(curClass).println(
-                       "Formal parameter " + formal.getName().toString() + " is multiply defined.");
-                } else {
-                    symbolTable.addId(formal.getName(), formal.getType());
-                }
-            } else {
-                classTable.semantError(curClass).println(
-                       "Class " + curClass.name.toString() + " of formal parameter " + 
-                       formal.getName().toString() + " is undefined.");
+        
+        method originMethod = this;
+        AbstractSymbol className = curClass.getName();
+        while (!TreeConstants.Object_.equals(className)) {
+            method findMethod = (method) classTable.getFeature(name, className, true);
+            if (findMethod != null) {
+                originMethod = findMethod;
             }
+            className = classTable.getParent(className);
+        }
+   
+        if (originMethod.getFormals().getLength() != formals.getLength()) {
+            classTable.semantError(curClass).println("Incompatible number of formal parameters in redefined method " +
+                                                     name.toString() + ".");
+        } else {        
+            Enumeration f = originMethod.getFormals().getElements();
+            for (Enumeration e = formals.getElements(); e.hasMoreElements();) {
+                AbstractSymbol thisType = ((Formal) e.nextElement()).getType();
+                AbstractSymbol thatType = ((Formal) f.nextElement()).getType();
+                if (!thisType.equals(thatType)) {
+                    classTable.semantError(curClass).println("In redefined method " +
+                        name.toString() + ", parameter type " + thisType.toString() +
+                        " is different from original type " + thatType.toString());
+                }
+            }
+        }
+
+        for (Enumeration e = formals.getElements(); e.hasMoreElements();) {
+            ((Formal)e.nextElement()).semant(classTable, symbolTable, curClass);
         }
         AbstractSymbol exprType = expr.semant(classTable, symbolTable, curClass).get_type();
         symbolTable.exitScope();
 
-        if ((TreeConstants.SELF_TYPE.equals(return_type) && !return_type.equals(exprType)) ||
-            (!TreeConstants.SELF_TYPE.equals(return_type) && !classTable.isSubtype(exprType, return_type))) {
+        if (!classTable.hasType(return_type)) {
+            classTable.semantError(curClass).println("Undefined return type " + return_type.toString() +
+                                                     " in method " + name.toString() + ".");
+        }
+
+        if (!classTable.isSubtype(exprType, return_type)) {
             classTable.semantError(curClass).println("Inferred return type " + 
                        exprType.toString() + " of method " + name.toString() + 
                        " does not conform to declared return type " + return_type.toString() + ".");
         }
     }
+
 }
 
 
@@ -538,7 +558,8 @@ class attr extends Feature {
                 symbolTable.addId(name, type_decl); 
                 return; 
             }
-            AbstractSymbol exprType = init.semant(classTable, symbolTable, curClass).get_type();
+            AbstractSymbol exprType = init.semant(classTable, symbolTable, curClass).get_type(); 
+
             if (!classTable.isSubtype(exprType, type_decl)) {
                 classTable.semantError(curClass).println("Inferred type " + exprType.toString() + 
                                        " of initialization of attribute " + name.toString() + 
@@ -602,6 +623,27 @@ class formalc extends Formal {
     
     public AbstractSymbol getType() {
         return type_decl;
+    }
+
+    @Override
+    public void semant(ClassTable classTable, SymbolTable symbolTable, class_c curClass) {
+        if (TreeConstants.SELF_TYPE.equals(type_decl)) {
+            classTable.semantError(curClass).println("Formal parameter " + name.toString() + 
+                                                     " cannot have type SELF_TYPE.");
+            type_decl = TreeConstants.Object_;
+        }
+        if (classTable.hasType(type_decl)) {
+            if (symbolTable.probe(name) != null) {
+                classTable.semantError(curClass).println(
+                   "Formal parameter " + name.toString() + " is multiply defined.");
+            } else {
+                symbolTable.addId(name, type_decl);
+            }
+        } else {
+            classTable.semantError(curClass).println(
+                   "Class " + curClass.getName().toString() + " of formal parameter " + 
+                   name.toString() + " is undefined.");
+        }
     }
 }
 
@@ -790,8 +832,9 @@ class static_dispatch extends Expression {
                     Formal decl = (Formal) d.nextElement();            
                     AbstractSymbol declName = decl.getName();
                     AbstractSymbol declType = decl.getType();
-                    //System.out.println(declType);
-                    if (!classTable.isSubtype(actualType, declType)) { 
+                    
+                    AbstractSymbol evalActualType = TreeConstants.SELF_TYPE.equals(actualType) ? curClass.getName() : actualType;
+                    if (!classTable.isSubtype(evalActualType, declType)) { 
                         classTable.semantError(curClass).println("In call of method " +
                               name.toString() + ", type " + actualType.toString() + " of parameter " +
                               declName.toString() + " does not conform to declared type " + 
@@ -871,15 +914,16 @@ class dispatch extends Expression {
             if (actual.getLength() != dispatchMethod.getFormals().getLength()) {
                 classTable.semantError(curClass).println("Method " + name.toString() + 
                                                          " called with wrong number of arguments.");
-            } else {
+            } else { // formals can be empty
                 Enumeration d = dispatchMethod.getFormals().getElements();
                 for (Enumeration e = actual.getElements(); e.hasMoreElements();) {          
                     AbstractSymbol actualType = ((Expression) e.nextElement()).semant(classTable, symbolTable, curClass).get_type();
                     Formal decl = (Formal) d.nextElement();            
                     AbstractSymbol declName = decl.getName();
                     AbstractSymbol declType = decl.getType();
-                    //System.out.println(declType);
-                    if (!classTable.isSubtype(actualType, declType)) { 
+
+                    AbstractSymbol evalActualType = TreeConstants.SELF_TYPE.equals(actualType) ? curClass.getName() : actualType;
+                    if (!classTable.isSubtype(evalActualType, declType)) { 
                         classTable.semantError(curClass).println("In call of method " +
                               name.toString() + ", type " + actualType.toString() + " of parameter " +
                               declName.toString() + " does not conform to declared type " + 
@@ -981,8 +1025,12 @@ class loop extends Expression {
 
     @Override
     public Expression semant(ClassTable classTable, SymbolTable symbolTable, class_c curClass) {
-        // TODO
-        return new no_expr(0);
+        AbstractSymbol predType = pred.semant(classTable, symbolTable, curClass).get_type();
+        if (!TreeConstants.Bool.equals(predType)) {
+            classTable.semantError(curClass).println("Loop condition does not have type Bool.");
+        }
+        body.semant(classTable, symbolTable, curClass);
+        return set_type(TreeConstants.Object_);
     }
 
 }
@@ -1736,10 +1784,11 @@ class new_ extends Expression {
 
     @Override
     public Expression semant(ClassTable classTable, SymbolTable symbolTable, class_c curClass) {
-        if (TreeConstants.SELF_TYPE.equals(type_name)) {
-            return set_type(TreeConstants.SELF_TYPE);
+        if (classTable.hasType(type_name)) {
+            return set_type(type_name);
         }
-        return set_type(type_name);
+        classTable.semantError(curClass).println("'new' used with undefined class " + type_name.toString() + ".");
+        return set_type(TreeConstants.Object_);     
     }
 
 }

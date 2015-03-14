@@ -215,6 +215,10 @@ class ClassTable {
 
     public boolean isSubtype(AbstractSymbol sub, AbstractSymbol ancestor) {
         assert(hasType(sub) && hasType(ancestor));
+        if (TreeConstants.SELF_TYPE.equals(sub) || TreeConstants.SELF_TYPE.equals(ancestor)) {
+            return sub.equals(ancestor);
+        }
+
         if (ancestor.equals(sub)) { return true; }
         if (ancestor.equals(TreeConstants.Object_)) { return true; }
         if (basicClassMap.containsKey(sub)) { return false; }
