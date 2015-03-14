@@ -193,6 +193,7 @@ abstract class Case extends TreeNode {
         super(lineNumber);
     }
     public abstract void dump_with_types(PrintStream out, int n);
+    public abstract AbstractSymbol semant(ClassTable classTable, SymbolTable, symbolTable, class_c curClass, AbstractSymbol curType);
 
 }
 
@@ -687,6 +688,22 @@ class branch extends Case {
 	expr.dump_with_types(out, n + 2);
     }
 
+    @Override
+    // Last Edit Here
+    public AbstractSymbol semant(ClassTable classTable, SymbolTable symbolTable, class_c curClass, AbstractSymbol curType) {
+         AbstractSymbol retType = TreeConstants.Object_;
+         if (!classTable.hasType(type_decl)) {
+             classTable.semantError(curClass).println("Class " + type_decl.toString() + " of case branch is undefined.")
+         } else if (TreeConstants.SELF_TYPE.equals(type_decl) {
+             classTable.semantError(curClass).println("Identifier " + name.toString() + " declared with type SELF_TYPE in case branch.");
+         } else {
+             curType = type_decl;
+             retType = expr.semant(classTable, symbolTable, curClass).get_type();
+             return retType;
+         }
+         return TreeConstants.Object_;
+    }
+
 }
 
 
@@ -981,8 +998,14 @@ class cond extends Expression {
 
     @Override
     public Expression semant(ClassTable classTable, SymbolTable symbolTable, class_c curClass) {
-        // TODO
-        return new no_expr(0);
+        AbstractSymbol predType = pred.semant(classTable, symbolTable, curClass).get_type();
+        if (!TreeConstants.Bool.equals(predType)) {
+            classTable.semantError(curClass).println("Predicate of 'if' does not have type Bool.");
+        }
+        AbstractSymbol thenType = then_exp.semant(classTable, symbolTable, curClass).get_type();
+        AbstractSymbol elseType = else_exp.semant(classTable, symbolTable, curClass).get_type();
+        AbstractSymbol lub = classTable.getLub(thenType, elseType);
+        return set_type(lub);
     }
 
 }
@@ -1075,8 +1098,10 @@ class typcase extends Expression {
 
     @Override
     public Expression semant(ClassTable classTable, SymbolTable symbolTable, class_c curClass) {
-        // TODO
-        return new no_expr(0);
+        AbstractSymbol exprType = expr.semant(classTable, symbolTable, curClass).get_type();
+        for (Enumeration e = cases.getElements(); e.hasMoreElement();) {
+            
+        }
     }
 
 }

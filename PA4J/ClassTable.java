@@ -189,7 +189,7 @@ class ClassTable {
         basicClassMap.put(TreeConstants.Str, Str_class); 
         basicClassMap.put(TreeConstants.SELF_TYPE, Self_class); 
      
-        //classTableMap.put(TreeConstants.Object_, Object_class);
+        classTableMap.put(TreeConstants.Object_, Object_class);
         classTableMap.put(TreeConstants.IO, IO_class);
         classTableMap.put(TreeConstants.Int, Int_class);
         classTableMap.put(TreeConstants.Bool, Bool_class);
@@ -286,6 +286,13 @@ class ClassTable {
         return classes;
     }
 
+    public AbstractSymbol getLub(AbstractSymbol typeA, AbstractSymbol typeB) {
+        if (typeA.equals(typeB)) { return typeA; }
+        if (isSubtype(typeA, typeB)) { return typeB; }
+        if (isSubtype(typeB, typeA)) { return typeA; }
+        return getLub(getParent(typeA), getParent(typeB));
+    }
+
     private void checkCycle() {
         Set <AbstractSymbol> visited = new HashSet<AbstractSymbol>();
         Set <AbstractSymbol> undefined = new HashSet<AbstractSymbol>();
@@ -293,8 +300,8 @@ class ClassTable {
             class_c curClass = classTableMap.get(key);
             visited.clear();
             visited.add(curClass.name);
-            while (!TreeConstants.Object_.equals(curClass.parent) &&
-                   !TreeConstants.IO.equals(curClass.parent)) {
+            while (!TreeConstants.Object_.equals(curClass.name) &&
+                   !TreeConstants.IO.equals(curClass.name)) {
                 if (!classTableMap.containsKey(curClass.parent)) {
                     if (!undefined.contains(curClass.parent)) {
                     undefined.add(curClass.parent);
