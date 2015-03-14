@@ -233,7 +233,7 @@ class ClassTable {
     public Feature getFeature(AbstractSymbol featureName, AbstractSymbol className, boolean isMethod) {
         if (classTableMap.containsKey(className)) {
             AbstractSymbol pt = className; 
-            while (!TreeConstants.Object_.equals(pt)) {
+            while (!TreeConstants.No_class.equals(pt)) {
                 Features features = featureTableMap.get(pt);
                 if (features != null) {
                     for (Enumeration e = features.getElements(); e.hasMoreElements();) {

@@ -9,6 +9,7 @@
 import java.util.Enumeration;
 import java.io.PrintStream;
 import java.util.Vector;
+import java.util.*;
 
 
 /** Defines simple phylum Program */
@@ -193,7 +194,8 @@ abstract class Case extends TreeNode {
         super(lineNumber);
     }
     public abstract void dump_with_types(PrintStream out, int n);
-    public abstract AbstractSymbol semant(ClassTable classTable, SymbolTable, symbolTable, class_c curClass, AbstractSymbol curType);
+    public abstract AbstractSymbol semant(ClassTable classTable, SymbolTable symbolTable, class_c curClass);
+    public abstract AbstractSymbol getType();
 
 }
 
@@ -633,10 +635,13 @@ class formalc extends Formal {
                                                      " cannot have type SELF_TYPE.");
             type_decl = TreeConstants.Object_;
         }
+
         if (classTable.hasType(type_decl)) {
             if (symbolTable.probe(name) != null) {
                 classTable.semantError(curClass).println(
                    "Formal parameter " + name.toString() + " is multiply defined.");
+            } else if (TreeConstants.self.equals(name)) {
+                classTable.semantError(curClass).println("'self' cannot be the name of a formal parameter.");
             } else {
                 symbolTable.addId(name, type_decl);
             }
@@ -689,19 +694,25 @@ class branch extends Case {
     }
 
     @Override
-    // Last Edit Here
-    public AbstractSymbol semant(ClassTable classTable, SymbolTable symbolTable, class_c curClass, AbstractSymbol curType) {
+    public AbstractSymbol semant(ClassTable classTable, SymbolTable symbolTable, class_c curClass) {
          AbstractSymbol retType = TreeConstants.Object_;
          if (!classTable.hasType(type_decl)) {
-             classTable.semantError(curClass).println("Class " + type_decl.toString() + " of case branch is undefined.")
-         } else if (TreeConstants.SELF_TYPE.equals(type_decl) {
+             classTable.semantError(curClass).println("Class " + type_decl.toString() + " of case branch is undefined.");
+         } else if (TreeConstants.SELF_TYPE.equals(type_decl)) {
              classTable.semantError(curClass).println("Identifier " + name.toString() + " declared with type SELF_TYPE in case branch.");
          } else {
-             curType = type_decl;
+             symbolTable.enterScope();
+             symbolTable.addId(name, type_decl);
              retType = expr.semant(classTable, symbolTable, curClass).get_type();
+             symbolTable.exitScope();
              return retType;
          }
          return TreeConstants.Object_;
+    }
+    
+    @Override
+    public AbstractSymbol getType() {
+        return type_decl;
     }
 
 }
@@ -835,7 +846,7 @@ class static_dispatch extends Expression {
         // lookup dispatched methods in ancestor classes if type is self
 
         dispatchMethod = (method) classTable.getFeature(name, type_name, true);
-
+        //System.out.print(name.toString() + " " + type_name.toString());
         if (dispatchMethod == null) {
             classTable.semantError(curClass).println("Dispatch to undefined method " + name.toString() + ".");
         } else {
@@ -923,8 +934,9 @@ class dispatch extends Expression {
         }
         // lookup dispatched methods in ancestor classes if type is self
         AbstractSymbol className = TreeConstants.SELF_TYPE.equals(exprType) ? curClass.getName() : exprType;
+        
         dispatchMethod = (method) classTable.getFeature(name, className, true);
-
+        //System.out.println(name.toString() + " " + className.toString());
         if (dispatchMethod == null) {
             classTable.semantError(curClass).println("Dispatch to undefined method " + name.toString() + ".");
         } else {
@@ -947,7 +959,8 @@ class dispatch extends Expression {
                               declType.toString() + ".");
                     }
                 }
-                return set_type(dispatchMethod.getType());
+                AbstractSymbol retType = TreeConstants.SELF_TYPE.equals(dispatchMethod.getType()) ? exprType : dispatchMethod.getType();
+                return set_type(retType);
             }
         }
         return set_type(TreeConstants.Object_);
@@ -1099,9 +1112,28 @@ class typcase extends Expression {
     @Override
     public Expression semant(ClassTable classTable, SymbolTable symbolTable, class_c curClass) {
         AbstractSymbol exprType = expr.semant(classTable, symbolTable, curClass).get_type();
-        for (Enumeration e = cases.getElements(); e.hasMoreElement();) {
-            
+        AbstractSymbol lubCaseType = TreeConstants.Object_;
+        AbstractSymbol retType = TreeConstants.Object_;
+        Set<AbstractSymbol> typeSet = new HashSet<AbstractSymbol>();
+
+        for (Enumeration e = cases.getElements(); e.hasMoreElements();) {
+            Case branch = (Case) e.nextElement();
+            AbstractSymbol curCaseType = branch.getType();
+            AbstractSymbol curRetType = branch.semant(classTable, symbolTable, curClass);
+            // if exprType <= curCaseType <= retType; accept  
+            // otherwise skip
+            if (typeSet.contains(curCaseType)) {
+                classTable.semantError(curClass).println("Duplicate branch " + curCaseType.toString() + " in case statement.");
+                continue;
+            } else {
+                typeSet.add(curCaseType);
+            }
+            if (classTable.isSubtype(exprType, curCaseType) && classTable.isSubtype(curCaseType, lubCaseType)) {
+                lubCaseType = curCaseType;
+                retType = curRetType;
+            }   
         }
+        return set_type(retType);
     }
 
 }
