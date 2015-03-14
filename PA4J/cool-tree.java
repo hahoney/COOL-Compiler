@@ -274,7 +274,7 @@ class programc extends Program {
 	ClassTable classTable = new ClassTable(classes);
         int typeError = 0;	
         /* Scan all class features (methods only in COOL) to acquire names */
-        for (Enumeration e = classes.getElements(); e.hasMoreElements();) {
+        for (Enumeration e = classTable.getAllClasses().getElements(); e.hasMoreElements();) {
             ((Class_) e.nextElement()).scanFeatures(classTable);
         }
         //classTable.dumpFeatures();
@@ -369,9 +369,7 @@ class class_c extends Class_ {
     public void scanFeatures(ClassTable classTable) {
         for (Enumeration e = features.getElements(); e.hasMoreElements();) {
             Feature f = (Feature) e.nextElement();
-            if (f instanceof method) {
                 classTable.addFeature(f, this);
-            }
         }
     }
 }
@@ -525,11 +523,17 @@ class attr extends Feature {
             classTable.semantError(curClass).println("'self' cannot be the name of an attribute.");
             errorCount++;
         }
+
         if (errorCount == 0 && firstScan) {
             symbolTable.addId(name, type_decl); 
         }
 
         if (!firstScan) {
+            // the inherit duplicate attr check is in the second scan
+            if (classTable.getFeature(name, curClass.getParent(), false) != null) {            
+                classTable.semantError(curClass).println("Attribute " + name.toString() + " is an attribute of an inherited class.");
+            }
+
             if (init instanceof no_expr) { 
                 symbolTable.addId(name, type_decl); 
                 return; 
@@ -682,10 +686,17 @@ class assign extends Expression {
     @Override
     public Expression semant(ClassTable classTable, SymbolTable symbolTable, class_c curClass) {
         AbstractSymbol assignType = (AbstractSymbol)symbolTable.lookup(name);
+        AbstractSymbol exprType = expr.semant(classTable, symbolTable, curClass).get_type();
         if (assignType == null) {
-            classTable.semantError(curClass).println("Assignment to undeclared variable "+ name.toString() +".");
-        } else {
-            AbstractSymbol exprType = expr.semant(classTable, symbolTable, curClass).get_type();
+            Feature attrFeature = classTable.getFeature(name, curClass.getName(), false);
+            if (attrFeature != null) {
+                assignType = attrFeature.getType();
+            } else {
+                classTable.semantError(curClass).println("Assignment to undeclared variable "+ name.toString() +".");
+            }
+        }
+     
+        if (assignType != null) {          
             if (!classTable.isSubtype(exprType, assignType)) {
                 classTable.semantError(curClass).println("Type " + exprType.toString() + 
                          " of assigned expression does not conform to declared type "+ assignType.toString() +
@@ -750,8 +761,47 @@ class static_dispatch extends Expression {
 
     @Override
     public Expression semant(ClassTable classTable, SymbolTable symbolTable, class_c curClass) {
-        // TODO
-        return new no_expr(0);
+        AbstractSymbol exprType;
+        method dispatchMethod = null;
+
+        exprType = expr.semant(classTable, symbolTable, curClass).get_type();
+        if (!classTable.isSubtype(exprType, type_name)) {
+            classTable.semantError(curClass).println("Expression type " + exprType.toString() + 
+                     " does not conform to declared static dispatch type " + type_name.toString() + ".");
+        }
+        if (TreeConstants.SELF_TYPE.equals(type_name)) {
+            classTable.semantError(curClass).println("Static dispatch to SELF_TYPE.");
+            type_name = TreeConstants.Object_;
+        }
+        // lookup dispatched methods in ancestor classes if type is self
+
+        dispatchMethod = (method) classTable.getFeature(name, type_name, true);
+
+        if (dispatchMethod == null) {
+            classTable.semantError(curClass).println("Dispatch to undefined method " + name.toString() + ".");
+        } else {
+            if (actual.getLength() != dispatchMethod.getFormals().getLength()) {
+                classTable.semantError(curClass).println("Method " + name.toString() + 
+                                                         " called with wrong number of arguments.");
+            } else {
+                Enumeration d = dispatchMethod.getFormals().getElements();
+                for (Enumeration e = actual.getElements(); e.hasMoreElements();) {          
+                    AbstractSymbol actualType = ((Expression) e.nextElement()).semant(classTable, symbolTable, curClass).get_type();
+                    Formal decl = (Formal) d.nextElement();            
+                    AbstractSymbol declName = decl.getName();
+                    AbstractSymbol declType = decl.getType();
+                    //System.out.println(declType);
+                    if (!classTable.isSubtype(actualType, declType)) { 
+                        classTable.semantError(curClass).println("In call of method " +
+                              name.toString() + ", type " + actualType.toString() + " of parameter " +
+                              declName.toString() + " does not conform to declared type " + 
+                              declType.toString() + ".");
+                    }
+                }
+                return set_type(dispatchMethod.getType()); 
+            }
+        }
+        return set_type(TreeConstants.Object_);
     }
 
 }
@@ -804,18 +854,16 @@ class dispatch extends Expression {
     @Override
     public Expression semant(ClassTable classTable, SymbolTable symbolTable, class_c curClass) {
         AbstractSymbol exprType;
-        method dispatchMethod;
+        method dispatchMethod = null;
 
         if (expr instanceof no_expr) {
             exprType = TreeConstants.SELF_TYPE;
         } else {
             exprType = expr.semant(classTable, symbolTable, curClass).get_type();
         }
-        if (TreeConstants.SELF_TYPE.equals(exprType)) {
-            dispatchMethod = (method) classTable.getFeature(curClass.getName(), name);
-        } else {
-            dispatchMethod = (method) classTable.getFeature(exprType, name);
-        }
+        // lookup dispatched methods in ancestor classes if type is self
+        AbstractSymbol className = TreeConstants.SELF_TYPE.equals(exprType) ? curClass.getName() : exprType;
+        dispatchMethod = (method) classTable.getFeature(name, className, true);
 
         if (dispatchMethod == null) {
             classTable.semantError(curClass).println("Dispatch to undefined method " + name.toString() + ".");
@@ -838,12 +886,7 @@ class dispatch extends Expression {
                               declType.toString() + ".");
                     }
                 }
-                // check return type
-                if (TreeConstants.SELF_TYPE.equals(dispatchMethod.getType())) {
-                    return set_type(curClass.getName());
-                } else {
-                    return set_type(dispatchMethod.getType());
-                }
+                return set_type(dispatchMethod.getType());
             }
         }
         return set_type(TreeConstants.Object_);
@@ -1812,6 +1855,11 @@ class object extends Expression {
         if (symbolTable.lookup(name) != null) {
             return set_type((AbstractSymbol) symbolTable.lookup(name));
         } else {
+            // check ancestor classes if cannot find in outer scope
+            attr attrObject = (attr) classTable.getFeature(name, curClass.getName(), false);
+            if (attrObject != null) {
+                return set_type(attrObject.getType());
+            }
             classTable.semantError(curClass).println("Undeclared identifier " + name.toString() + ".");
         }
         return set_type(TreeConstants.Object_);

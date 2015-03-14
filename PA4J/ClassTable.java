@@ -11,7 +11,7 @@ class ClassTable {
 
     private Map<AbstractSymbol, class_c> basicClassMap;
     private Map<AbstractSymbol, class_c> classTableMap;
-    private Map<AbstractSymbol, Features>featureTableMap;
+    private Map<AbstractSymbol, Features> featureTableMap;
 
     /** Creates data structures representing basic Cool classes (Object,
      * IO, Int, Bool, String).  Please note: as is this method does not
@@ -225,17 +225,26 @@ class ClassTable {
         }
         return false; 
     }
-
-    public Feature getFeature(AbstractSymbol className, AbstractSymbol methodName) {
-        if (featureTableMap.containsKey(className)) {
-            Features methods = featureTableMap.get(className);
-            for (Enumeration e = methods.getElements(); e.hasMoreElements();) {
-                Feature method = (Feature) e.nextElement();
-                if (method.getName().equals(methodName)) {
-                    return method;
+    // get feature from curClass or its nearest ancestor
+    public Feature getFeature(AbstractSymbol featureName, AbstractSymbol className, boolean isMethod) {
+        if (classTableMap.containsKey(className)) {
+            AbstractSymbol pt = className; 
+            while (!TreeConstants.Object_.equals(pt)) {
+                Features features = featureTableMap.get(pt);
+                if (features != null) {
+                    for (Enumeration e = features.getElements(); e.hasMoreElements();) {
+                        Feature feature = (Feature) e.nextElement();
+                        if (feature.getName().equals(featureName)) {
+                            if ((feature instanceof method && isMethod) ||
+                                (feature instanceof attr && !isMethod)) {
+                                return feature;
+                            }
+                        }
+                    }
                 }
+                pt = classTableMap.get(pt).getParent();
             }
-        } 
+        }
         return null; 
     }
 
@@ -256,6 +265,21 @@ class ClassTable {
                 System.out.println(((Feature)e.nextElement()).getName());
             }
         }
+    }
+
+    public AbstractSymbol getParent(AbstractSymbol className) {
+        if (classTableMap.containsKey(className)) {
+            return classTableMap.get(className).parent;
+        }
+        return TreeConstants.Object_;
+    }
+
+    public Classes getAllClasses() {
+        Classes classes = new Classes(0);
+        for (AbstractSymbol className : classTableMap.keySet()) {
+            classes.addElement(classTableMap.get(className));
+        }
+        return classes;
     }
 
     private void checkCycle() {
