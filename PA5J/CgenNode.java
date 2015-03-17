@@ -92,6 +92,7 @@ class CgenNode extends class_ {
     boolean basic() { 
 	return basic_status == Basic; 
     }
+
 }
     
 

@@ -399,6 +399,11 @@ class method extends Feature {
         dump_AbstractSymbol(out, n + 2, return_type);
 	expr.dump_with_types(out, n + 2);
     }
+   
+    // don't like direct attr access
+    public AbstractSymbol getName() {
+        return name;
+    }
 
 }
 

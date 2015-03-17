@@ -25,6 +25,8 @@ import java.io.PrintStream;
 import java.util.Vector;
 import java.util.Enumeration;
 
+import java.util.Stack;
+
 /** This class is used for representing the inheritance tree during code
     generation. You will need to fill in some of its methods and
     potentially extend it in other useful ways. */
@@ -39,6 +41,9 @@ class CgenClassTable extends SymbolTable {
     private int stringclasstag;
     private int intclasstag;
     private int boolclasstag;
+    private int objectclasstag;
+    private int ioclasstag;
+    
 
 
     // The following methods emit code for constants and global
@@ -149,6 +154,62 @@ class CgenClassTable extends SymbolTable {
 	codeBools(boolclasstag);
     }
 
+    /** Create the Prototype objects
+    **/
+    private void codeClassTable() {
+        codeClassNameTable();
+        codeClassObjectTable();
+        codeClassDispatchTable();
+    }
+
+    private void codeClassNameTable() {
+        str.print(CgenSupport.CLASSNAMETAB + CgenSupport.LABEL);
+        for (Object c : nds) {
+            StringSymbol sym = (StringSymbol) AbstractTable.stringtable.lookup(((CgenNode)c).getName().toString());
+            if (sym != null) {
+                str.print(CgenSupport.WORD); 
+                sym.codeRef(str); 
+                str.println(""); 
+            }          
+        }
+    }
+
+    private void codeClassObjectTable() {
+        str.print(CgenSupport.CLASSOBJTAB + CgenSupport.LABEL);
+        for (Object c : nds) {
+            str.print(CgenSupport.WORD);
+            CgenSupport.emitProtObjRef(((CgenNode)c).getName(), str);
+            str.println("");
+            str.print(CgenSupport.WORD);
+            CgenSupport.emitInitRef(((CgenNode)c).getName(), str);
+            str.println("");
+        }
+    }
+
+    private void codeClassDispatchTable() {
+        for (Object c : nds) {
+            CgenNode pt = (CgenNode) c;
+            CgenSupport.emitDispTableRef(pt.getName(), str);
+            str.print(CgenSupport.LABEL);
+            // Arrange class inheritance from top to bottom
+            Stack<CgenNode> classStack = new Stack<CgenNode>();            
+            while (!TreeConstants.No_class.equals(pt.getName())) {
+                classStack.push(pt);
+                pt = pt.getParentNd();
+            }
+            while (!classStack.isEmpty()) {
+                pt = classStack.pop();
+                for (Enumeration e = pt.getFeatures().getElements(); e.hasMoreElements();) {
+                    Feature feature = (Feature) e.nextElement();
+                    if (feature instanceof method) {
+                        str.print(CgenSupport.WORD);
+                        CgenSupport.emitMethodRef(pt.getName(), ((method)feature).getName(), str);
+                        str.println("");
+                    }
+                }
+            }      
+        }
+    }
 
     /** Creates data structures representing basic Cool classes (Object,
      * IO, Int, Bool, String).  Please note: as is this method does not
@@ -377,10 +438,13 @@ class CgenClassTable extends SymbolTable {
 
 	this.str = str;
 
-	stringclasstag = 0 /* Change to your String class tag here */;
-	intclasstag =    0 /* Change to your Int class tag here */;
-	boolclasstag =   0 /* Change to your Bool class tag here */;
-
+        objectclasstag = 0;
+        ioclasstag     = 1;
+	stringclasstag = 4 /* Change to your String class tag here */;
+	intclasstag =    2 /* Change to your Int class tag here */;
+	boolclasstag =   3 /* Change to your Bool class tag here */;
+        
+ 
 	enterScope();
 	if (Flags.cgen_debug) System.out.println("Building CgenClassTable");
 	
@@ -409,6 +473,9 @@ class CgenClassTable extends SymbolTable {
 	//                   - prototype objects
 	//                   - class_nameTab
 	//                   - dispatch tables
+        if (Flags.cgen_debug) System.out.println("zy: coding protobj, class_nameTab, dispatch tables");
+        codeClassTable();
+
 
 	if (Flags.cgen_debug) System.out.println("coding global text");
 	codeGlobalText();
