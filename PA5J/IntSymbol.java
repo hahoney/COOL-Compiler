@@ -51,6 +51,7 @@ class IntSymbol extends AbstractSymbol {
 	s.print(CgenSupport.WORD);
 
 	/* Add code to reference the dispatch table for class Int here */
+        s.print("Int_dispTab");
 
 	s.println("");		// dispatch table
 	s.println(CgenSupport.WORD + str); // integer value

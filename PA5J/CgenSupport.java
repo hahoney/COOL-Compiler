@@ -69,17 +69,6 @@ class CgenSupport {
     final static int SIZE_OFFSET = 1;
     final static int DISPTABLE_OFFSET = 2;
 
-    final static int STR_OBJFIELDS = 5;
-    final static int STRLEN_OFFSET = 3;
-    final static int STRCONST_OFFSET = 4;
-
-    final static int BOOL_OBJFIELDS = 4;
-    final static int BOOLCONST_OFFSET = 3;
-
-    final static int INT_OBJFIELDS = 4;
-    final static int INTCONST_OFFSET = 3;
-
-    
     final static int STRING_SLOTS      = 1;
     final static int INT_SLOTS         = 1;
     final static int BOOL_SLOTS        = 1;

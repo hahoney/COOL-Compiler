@@ -69,6 +69,7 @@ class BoolConst {
 	s.print(CgenSupport.WORD);
 
 	/* Add code to reference the dispatch table for class Bool here */
+        s.print("Bool_dispTab");
 
 	s.println("");		// dispatch table
 	s.println(CgenSupport.WORD + (val ? "1" : "0")); // value (0 or 1)

@@ -72,7 +72,8 @@ abstract class Feature extends TreeNode {
         super(lineNumber);
     }
     public abstract void dump_with_types(PrintStream out, int n);
-
+    public abstract AbstractSymbol getName();
+    public abstract AbstractSymbol getType();
 }
 
 
@@ -405,6 +406,10 @@ class method extends Feature {
         return name;
     }
 
+    public AbstractSymbol getType() {
+        return return_type;
+    }
+
 }
 
 
@@ -445,6 +450,15 @@ class attr extends Feature {
         dump_AbstractSymbol(out, n + 2, name);
         dump_AbstractSymbol(out, n + 2, type_decl);
 	init.dump_with_types(out, n + 2);
+    }
+
+    // don't like direct attr access
+    public AbstractSymbol getName() {
+        return name;
+    }
+  
+    public AbstractSymbol getType() {
+        return type_decl;
     }
 
 }

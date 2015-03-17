@@ -41,11 +41,8 @@ class CgenClassTable extends SymbolTable {
     private int stringclasstag;
     private int intclasstag;
     private int boolclasstag;
-    private int objectclasstag;
-    private int ioclasstag;
+
     
-
-
     // The following methods emit code for constants and global
     // declarations.
 
@@ -160,6 +157,7 @@ class CgenClassTable extends SymbolTable {
         codeClassNameTable();
         codeClassObjectTable();
         codeClassDispatchTable();
+        codeClassObjectProt();
     }
 
     private void codeClassNameTable() {
@@ -208,6 +206,56 @@ class CgenClassTable extends SymbolTable {
                     }
                 }
             }      
+        }
+    }
+
+    private void codeClassObjectProt() {
+        int classTagNumber = 0;
+        for (Object c : nds) {
+            CgenNode pt = (CgenNode) c;
+            // Eye catcher
+            str.println(CgenSupport.WORD + "-1");
+            // class label
+            CgenSupport.emitProtObjRef(pt.getName(), str);
+            str.print(CgenSupport.LABEL);
+            // class tag
+            str.println(CgenSupport.WORD + classTagNumber);
+            // count size: size = tag (1) + size (1) + disptab (1) + attrNum
+            int attrNumber = 0;
+            for (Enumeration e = pt.getFeatures().getElements(); e.hasMoreElements();) {
+                Feature feature = (Feature) e.nextElement();
+                if (feature instanceof attr) {
+                    attrNumber++;
+                }
+            }
+            str.print(CgenSupport.WORD);
+            str.println(CgenSupport.DEFAULT_OBJFIELDS + attrNumber);
+
+            // dispatch table
+            str.print(CgenSupport.WORD);
+            CgenSupport.emitDispTableRef(pt.getName(), str);
+            str.println("");
+
+            // attr list
+            for (Enumeration e = pt.getFeatures().getElements(); e.hasMoreElements();) {
+                Feature feature = (Feature) e.nextElement();
+                if (feature instanceof attr) {
+                    str.print(CgenSupport.WORD);
+                    AbstractSymbol sym = feature.getType();
+                    if (TreeConstants.Str.equals(sym)) {
+                        StringSymbol strSymbol = (StringSymbol) AbstractTable.stringtable.lookup("");
+                        strSymbol.codeRef(str);
+                    } else if (TreeConstants.Int.equals(sym)) {
+                        IntSymbol intSymbol = (IntSymbol) AbstractTable.inttable.lookup("0");
+                        intSymbol.codeRef(str);
+                    } else if (TreeConstants.Bool.equals(sym)){
+                        new BoolConst(false).codeRef(str);
+                    } else {
+                        str.print(0);
+                    }
+                    str.println("");
+                }
+            }
         }
     }
 
@@ -438,8 +486,6 @@ class CgenClassTable extends SymbolTable {
 
 	this.str = str;
 
-        objectclasstag = 0;
-        ioclasstag     = 1;
 	stringclasstag = 4 /* Change to your String class tag here */;
 	intclasstag =    2 /* Change to your Int class tag here */;
 	boolclasstag =   3 /* Change to your Bool class tag here */;

@@ -51,6 +51,7 @@ class StringSymbol extends AbstractSymbol {
 	s.print(CgenSupport.WORD);
 
 	/* Add code to reference the dispatch table for class String here */
+        s.print("String_dispTab");
 
 	s.println("");		// dispatch table
 	s.print(CgenSupport.WORD); lensym.codeRef(s); s.println(""); // length
