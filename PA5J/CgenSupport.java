@@ -582,6 +582,41 @@ class CgenSupport {
 	byteMode(s);
 	s.println("\t.byte\t0\t");
     }
+
+
+    // My own utilities
+
+/*
+        addiu   $sp $sp -12
+        sw      $fp 12($sp)
+        sw      $s0 8($sp)
+        sw      $ra 4($sp)
+        addiu   $fp $sp 4
+        move    $s0 $a0
+*/
+    public static void emitEnterFunc(int attrSizeByWord, PrintStream s) {
+        emitAddiu(SP, SP, -(attrSizeByWord + 3) * WORD_SIZE, s);
+        emitStore(FP, 3, SP, s);
+        emitStore(SELF, 2, SP, s);
+        emitStore(RA, 1, SP, s);
+        emitAddiu(FP, SP, WORD_SIZE, s);
+        emitMove(SELF, ACC, s);
+    }
+
+/*
+        lw      $fp 12($sp)
+        lw      $s0 8($sp)
+        lw      $ra 4($sp)
+        addiu   $sp $sp 12
+        jr      $ra
+*/
+    public static void emitExitFunc(int attrSizeByWord, PrintStream s) {
+        emitLoad(RA, 1, SP, s);
+        emitLoad(SELF, 2, SP, s);
+        emitLoad(FP, 3, SP, s);
+        emitAddiu(SP, SP, (3 + attrSizeByWord) * WORD_SIZE, s);
+        emitReturn(s);
+    }
 }
     
     

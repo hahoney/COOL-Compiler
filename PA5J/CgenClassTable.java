@@ -259,6 +259,62 @@ class CgenClassTable extends SymbolTable {
         }
     }
 
+    private void codeClassObjectInit() {
+        for (Object c : nds) {
+            int attrSizeByWord = 0;
+            CgenNode node = (CgenNode) c;
+            // Scan attrs number
+            for (Enumeration e = node.getFeatures().getElements(); e.hasMoreElements();) {
+                Feature feature = (Feature) e.nextElement();
+                if (feature instanceof attr) {
+                    attrSizeByWord++;
+                }
+            }
+
+            CgenSupport.emitInitRef(node.getName(), str);
+            str.print(CgenSupport.LABEL);
+            CgenSupport.emitEnterFunc(attrSizeByWord, str);
+            // Initialize parent
+            if (!TreeConstants.Object_.equals(node.getName())) {
+                str.print(CgenSupport.JAL);
+                CgenSupport.emitInitRef(node.getParentNd().getName(), str);
+                str.println("");
+            }
+            // cgen attrs
+            for (Enumeration e = node.getFeatures().getElements(); e.hasMoreElements();) {
+                Feature feature = (Feature) e.nextElement();
+                if (feature instanceof attr) {
+                    ((attr) feature).cgen(node, str);
+                }
+            }
+
+            CgenSupport.emitMove(CgenSupport.ACC, CgenSupport.SELF, str);
+            CgenSupport.emitExitFunc(attrSizeByWord, str);
+            /* I saw some error recovery code like, so the above 
+               return procedure should be replaced if dispatch
+               error occurs. TODO
+               bne     $a0 $zero label0
+               la      $a0 str_const0
+               li      $t1 1
+              jal     _dispatch_abort
+            */
+        }
+    }
+
+    private void codeClassMethod() {
+        for (Object c : nds) {
+            CgenNode node = (CgenNode) c;
+            if (!node.basic()) {
+                for (Enumeration e = node.getFeatures().getElements(); e.hasMoreElements();) {
+                    Feature feature = (Feature) e.nextElement();
+                    if (feature instanceof method) {
+                        ((method) feature).cgen(node, str);
+                    }
+                }
+            }
+        }
+    }
+
     /** Creates data structures representing basic Cool classes (Object,
      * IO, Int, Bool, String).  Please note: as is this method does not
      * do anything useful; you will need to edit it to make if do what
@@ -530,12 +586,18 @@ class CgenClassTable extends SymbolTable {
 	//                   - object initializer
 	//                   - the class methods
 	//                   - etc...
+        if (Flags.cgen_debug) System.out.println("coding initialization");
+        codeClassObjectInit();
+     
+        if (Flags.cgen_debug) System.out.println("coding methods");
+        codeClassMethod();
     }
 
     /** Gets the root of the inheritance tree */
     public CgenNode root() {
 	return (CgenNode)probe(TreeConstants.Object_);
     }
+
 }
 			  
     

@@ -74,6 +74,7 @@ abstract class Feature extends TreeNode {
     public abstract void dump_with_types(PrintStream out, int n);
     public abstract AbstractSymbol getName();
     public abstract AbstractSymbol getType();
+    public abstract void cgen(CgenNode node, PrintStream s);
 }
 
 
@@ -409,6 +410,19 @@ class method extends Feature {
     public AbstractSymbol getType() {
         return return_type;
     }
+    
+    @Override
+    public void cgen(CgenNode node, PrintStream s) {
+        int tempVarNumber = 0;
+        /* complex func, has to check temp var number, make 
+        the program.s work first */
+        CgenSupport.emitMethodRef(node.getName(), name, s);
+        s.print(CgenSupport.LABEL);
+        CgenSupport.emitEnterFunc(tempVarNumber, s);
+        
+        CgenSupport.emitExitFunc(tempVarNumber, s);
+        
+    }
 
 }
 
@@ -456,9 +470,13 @@ class attr extends Feature {
     public AbstractSymbol getName() {
         return name;
     }
-  
+
     public AbstractSymbol getType() {
         return type_decl;
+    }
+
+    public void cgen(CgenNode node, PrintStream s) {
+        return;
     }
 
 }
@@ -583,6 +601,7 @@ class assign extends Expression {
       * @param s the output stream 
       * */
     public void code(PrintStream s) {
+        return;
     }
 
 
@@ -643,6 +662,7 @@ class static_dispatch extends Expression {
       * @param s the output stream 
       * */
     public void code(PrintStream s) {
+        return;
     }
 
 
