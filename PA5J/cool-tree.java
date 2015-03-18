@@ -74,7 +74,7 @@ abstract class Feature extends TreeNode {
     public abstract void dump_with_types(PrintStream out, int n);
     public abstract AbstractSymbol getName();
     public abstract AbstractSymbol getType();
-    public abstract void cgen(CgenNode node, PrintStream s);
+    public abstract void code(CgenNode node, SymbolTable symbolTable, PrintStream s);
 }
 
 
@@ -157,7 +157,8 @@ abstract class Expression extends TreeNode {
         else
             { out.println(Utilities.pad(n) + ": _no_type"); }
     }
-    public abstract void code(PrintStream s);
+    public abstract void code(CgenNode node, SymbolTable symbolTable, PrintStream s);
+    public abstract int getTempNumber();
 
 }
 
@@ -195,6 +196,8 @@ abstract class Case extends TreeNode {
         super(lineNumber);
     }
     public abstract void dump_with_types(PrintStream out, int n);
+    public abstract int getTempNumber();
+    public abstract void code(CgenNode node, SymbolTable symbolTable, PrintStream s);
 
 }
 
@@ -411,17 +414,25 @@ class method extends Feature {
         return return_type;
     }
     
-    @Override
-    public void cgen(CgenNode node, PrintStream s) {
-        int tempVarNumber = 0;
+    public void code(CgenNode node, SymbolTable symbolTable, PrintStream s) {
+        int tempVarNumber = expr.getTempNumber();
+        symbolTable.enterScope();
         /* complex func, has to check temp var number, make 
         the program.s work first */
         CgenSupport.emitMethodRef(node.getName(), name, s);
         s.print(CgenSupport.LABEL);
         CgenSupport.emitEnterFunc(tempVarNumber, s);
+
+        int totalVar = CgenSupport.DEFAULT_OBJFIELDS + tempVarNumber + formals.getLength();
         
-        CgenSupport.emitExitFunc(tempVarNumber, s);
+        expr.code(node, symbolTable, s);
         
+        CgenSupport.emitExitFunc(tempVarNumber + formals.getLength(), s);
+        symbolTable.exitScope();
+    }
+
+    public int getTempNumber() {
+        return expr.getTempNumber();
     }
 
 }
@@ -475,8 +486,12 @@ class attr extends Feature {
         return type_decl;
     }
 
-    public void cgen(CgenNode node, PrintStream s) {
+    public void code(CgenNode node, SymbolTable symbolTable, PrintStream s) {
         return;
+    }
+
+    public int getTempNumber() {
+        return init.getTempNumber();
     }
 
 }
@@ -558,6 +573,13 @@ class branch extends Case {
 	expr.dump_with_types(out, n + 2);
     }
 
+    public int getTempNumber() {
+        return expr.getTempNumber();
+    }
+
+    public void code(CgenNode node, SymbolTable symbolTable, PrintStream s) {
+    }
+
 }
 
 
@@ -600,8 +622,12 @@ class assign extends Expression {
       * you wish.)
       * @param s the output stream 
       * */
-    public void code(PrintStream s) {
-        return;
+    public void code(CgenNode node, SymbolTable symbolTable, PrintStream s) {
+        
+    }
+
+    public int getTempNumber() {
+        return expr.getTempNumber();
     }
 
 
@@ -661,8 +687,17 @@ class static_dispatch extends Expression {
       * you wish.)
       * @param s the output stream 
       * */
-    public void code(PrintStream s) {
+    public void code(CgenNode node, SymbolTable symbolTable, PrintStream s) {
         return;
+    }
+
+    public int getTempNumber() {
+        int result = expr.getTempNumber();
+        for (Enumeration e = actual.getElements(); e.hasMoreElements();) {
+            int temp = ((Expression) e.nextElement()).getTempNumber();
+            result = result > temp ? result : temp;
+        }
+        return result;
     }
 
 
@@ -717,9 +752,17 @@ class dispatch extends Expression {
       * you wish.)
       * @param s the output stream 
       * */
-    public void code(PrintStream s) {
+    public void code(CgenNode node, SymbolTable symbolTable, PrintStream s) {
     }
 
+    public int getTempNumber() {
+        int result = expr.getTempNumber();
+        for (Enumeration e = actual.getElements(); e.hasMoreElements();) {
+            int temp = ((Expression) e.nextElement()).getTempNumber();
+            result = result > temp ? result : temp;
+        }
+        return result;
+    }
 
 }
 
@@ -768,10 +811,16 @@ class cond extends Expression {
       * you wish.)
       * @param s the output stream 
       * */
-    public void code(PrintStream s) {
+    public void code(CgenNode node, SymbolTable symbolTable, PrintStream s) {
     }
 
-
+    public int getTempNumber() {
+        int countThen = then_exp.getTempNumber();
+        int countElse = else_exp.getTempNumber();
+        int countPred = pred.getTempNumber();
+        int max = countThen > countElse ? countThen : countElse;
+        return countPred > max ? countPred : max;
+    }
 }
 
 
@@ -814,9 +863,12 @@ class loop extends Expression {
       * you wish.)
       * @param s the output stream 
       * */
-    public void code(PrintStream s) {
+    public void code(CgenNode node, SymbolTable symbolTable, PrintStream s) {
     }
 
+    public int getTempNumber() {
+        return pred.getTempNumber() > body.getTempNumber() ? pred.getTempNumber() : body.getTempNumber();
+    }
 
 }
 
@@ -862,10 +914,17 @@ class typcase extends Expression {
       * you wish.)
       * @param s the output stream 
       * */
-    public void code(PrintStream s) {
+    public void code(CgenNode node, SymbolTable symbolTable, PrintStream s) {
     }
 
-
+    public int getTempNumber() {
+        int result = expr.getTempNumber();
+        for (Enumeration e = cases.getElements(); e.hasMoreElements();) { 
+            int numCase = ((Case) e.nextElement()).getTempNumber();
+            result = result > numCase ? result : numCase;
+        } 
+        return result;
+    }
 }
 
 
@@ -905,10 +964,17 @@ class block extends Expression {
       * you wish.)
       * @param s the output stream 
       * */
-    public void code(PrintStream s) {
+    public void code(CgenNode node, SymbolTable symbolTable, PrintStream s) {
     }
 
-
+    public int getTempNumber() {
+        int result = 0;
+        for (Enumeration e = body.getElements(); e.hasMoreElements();) {
+            int temp = ((Expression) e.nextElement()).getTempNumber();
+            result = result > temp ? result : temp;
+        }
+        return result;
+    }
 }
 
 
@@ -961,10 +1027,12 @@ class let extends Expression {
       * you wish.)
       * @param s the output stream 
       * */
-    public void code(PrintStream s) {
+    public void code(CgenNode node, SymbolTable symbolTable, PrintStream s) {
     }
 
-
+    public int getTempNumber() {
+        return init.getTempNumber() > body.getTempNumber() + 1 ? init.getTempNumber() : body.getTempNumber() + 1;
+    }
 }
 
 
@@ -1007,10 +1075,12 @@ class plus extends Expression {
       * you wish.)
       * @param s the output stream 
       * */
-    public void code(PrintStream s) {
+    public void code(CgenNode node, SymbolTable symbolTable, PrintStream s) {
     }
 
-
+    public int getTempNumber() {
+        return e1.getTempNumber() > e2.getTempNumber() + 1 ? e1.getTempNumber() : e2.getTempNumber() + 1;
+    }
 }
 
 
@@ -1053,10 +1123,12 @@ class sub extends Expression {
       * you wish.)
       * @param s the output stream 
       * */
-    public void code(PrintStream s) {
+    public void code(CgenNode node, SymbolTable symbolTable, PrintStream s) {
     }
 
-
+    public int getTempNumber() {
+        return e1.getTempNumber() > e2.getTempNumber() + 1 ? e1.getTempNumber() : e2.getTempNumber() + 1;
+    }
 }
 
 
@@ -1099,9 +1171,12 @@ class mul extends Expression {
       * you wish.)
       * @param s the output stream 
       * */
-    public void code(PrintStream s) {
+    public void code(CgenNode node, SymbolTable symbolTable, PrintStream s) {
     }
 
+    public int getTempNumber() {
+        return e1.getTempNumber() > e2.getTempNumber() + 1 ? e1.getTempNumber() : e2.getTempNumber() + 1;
+    }
 
 }
 
@@ -1145,9 +1220,12 @@ class divide extends Expression {
       * you wish.)
       * @param s the output stream 
       * */
-    public void code(PrintStream s) {
+    public void code(CgenNode node, SymbolTable symbolTable, PrintStream s) {
     }
 
+    public int getTempNumber() {
+        return e1.getTempNumber() > e2.getTempNumber() + 1 ? e1.getTempNumber() : e2.getTempNumber() + 1;
+    }
 
 }
 
@@ -1186,10 +1264,12 @@ class neg extends Expression {
       * you wish.)
       * @param s the output stream 
       * */
-    public void code(PrintStream s) {
+    public void code(CgenNode node, SymbolTable symbolTable, PrintStream s) {
     }
 
-
+    public int getTempNumber() {
+        return e1.getTempNumber();
+    }
 }
 
 
@@ -1232,10 +1312,12 @@ class lt extends Expression {
       * you wish.)
       * @param s the output stream 
       * */
-    public void code(PrintStream s) {
+    public void code(CgenNode node, SymbolTable symbolTable, PrintStream s) {
     }
 
-
+    public int getTempNumber() {
+        return e1.getTempNumber() > e2.getTempNumber() + 1 ? e1.getTempNumber() : e2.getTempNumber() + 1;
+    }
 }
 
 
@@ -1278,10 +1360,12 @@ class eq extends Expression {
       * you wish.)
       * @param s the output stream 
       * */
-    public void code(PrintStream s) {
+    public void code(CgenNode node, SymbolTable symbolTable, PrintStream s) {
     }
 
-
+    public int getTempNumber() {
+        return e1.getTempNumber() > e2.getTempNumber() + 1 ? e1.getTempNumber() : e2.getTempNumber() + 1;
+    }
 }
 
 
@@ -1324,9 +1408,12 @@ class leq extends Expression {
       * you wish.)
       * @param s the output stream 
       * */
-    public void code(PrintStream s) {
+    public void code(CgenNode node, SymbolTable symbolTable, PrintStream s) {
     }
 
+    public int getTempNumber() {
+        return e1.getTempNumber() > e2.getTempNumber() + 1 ? e1.getTempNumber() : e2.getTempNumber() + 1;
+    }
 
 }
 
@@ -1365,10 +1452,12 @@ class comp extends Expression {
       * you wish.)
       * @param s the output stream 
       * */
-    public void code(PrintStream s) {
+    public void code(CgenNode node, SymbolTable symbolTable, PrintStream s) {
     }
 
-
+    public int getTempNumber() {
+        return e1.getTempNumber();
+    }
 }
 
 
@@ -1405,9 +1494,13 @@ class int_const extends Expression {
       * to you as an example of code generation.
       * @param s the output stream 
       * */
-    public void code(PrintStream s) {
+    public void code(CgenNode node, SymbolTable symbolTable, PrintStream s) {
 	CgenSupport.emitLoadInt(CgenSupport.ACC,
                                 (IntSymbol)AbstractTable.inttable.lookup(token.getString()), s);
+    }
+
+    public int getTempNumber() {
+        return 0;
     }
 
 }
@@ -1446,10 +1539,13 @@ class bool_const extends Expression {
       * to you as an example of code generation.
       * @param s the output stream 
       * */
-    public void code(PrintStream s) {
+    public void code(CgenNode node, SymbolTable symbolTable, PrintStream s) {
 	CgenSupport.emitLoadBool(CgenSupport.ACC, new BoolConst(val), s);
     }
 
+    public int getTempNumber() {
+        return 0;
+    }
 }
 
 
@@ -1488,11 +1584,14 @@ class string_const extends Expression {
       * to you as an example of code generation.
       * @param s the output stream 
       * */
-    public void code(PrintStream s) {
+    public void code(CgenNode node, SymbolTable symbolTable, PrintStream s) {
 	CgenSupport.emitLoadString(CgenSupport.ACC,
                                    (StringSymbol)AbstractTable.stringtable.lookup(token.getString()), s);
     }
 
+    public int getTempNumber() {
+        return 0;
+    }
 }
 
 
@@ -1530,10 +1629,12 @@ class new_ extends Expression {
       * you wish.)
       * @param s the output stream 
       * */
-    public void code(PrintStream s) {
+    public void code(CgenNode node, SymbolTable symbolTable, PrintStream s) {
     }
 
-
+    public int getTempNumber() {
+        return 1;
+    }
 }
 
 
@@ -1571,10 +1672,12 @@ class isvoid extends Expression {
       * you wish.)
       * @param s the output stream 
       * */
-    public void code(PrintStream s) {
+    public void code(CgenNode node, SymbolTable symbolTable, PrintStream s) {
     }
 
-
+    public int getTempNumber() {
+        return e1.getTempNumber();
+    }
 }
 
 
@@ -1607,10 +1710,12 @@ class no_expr extends Expression {
       * you wish.)
       * @param s the output stream 
       * */
-    public void code(PrintStream s) {
+    public void code(CgenNode node, SymbolTable symbolTable, PrintStream s) {
     }
 
-
+    public int getTempNumber() {
+        return 0;
+    }
 }
 
 
@@ -1648,10 +1753,12 @@ class object extends Expression {
       * you wish.)
       * @param s the output stream 
       * */
-    public void code(PrintStream s) {
+    public void code(CgenNode node, SymbolTable symbolTable, PrintStream s) {
     }
 
-
+    public int getTempNumber() {
+        return 0;
+    }
 }
 
 

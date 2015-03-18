@@ -284,7 +284,7 @@ class CgenClassTable extends SymbolTable {
             for (Enumeration e = node.getFeatures().getElements(); e.hasMoreElements();) {
                 Feature feature = (Feature) e.nextElement();
                 if (feature instanceof attr) {
-                    ((attr) feature).cgen(node, str);
+                    ((attr) feature).code(node, this, str);
                 }
             }
 
@@ -308,7 +308,7 @@ class CgenClassTable extends SymbolTable {
                 for (Enumeration e = node.getFeatures().getElements(); e.hasMoreElements();) {
                     Feature feature = (Feature) e.nextElement();
                     if (feature instanceof method) {
-                        ((method) feature).cgen(node, str);
+                        ((method) feature).code(node, this, str);
                     }
                 }
             }

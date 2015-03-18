@@ -594,8 +594,8 @@ class CgenSupport {
         addiu   $fp $sp 4
         move    $s0 $a0
 */
-    public static void emitEnterFunc(int attrSizeByWord, PrintStream s) {
-        emitAddiu(SP, SP, -(attrSizeByWord + 3) * WORD_SIZE, s);
+    public static void emitEnterFunc(int size, PrintStream s) {
+        emitAddiu(SP, SP, -(size + DEFAULT_OBJFIELDS) * WORD_SIZE, s);
         emitStore(FP, 3, SP, s);
         emitStore(SELF, 2, SP, s);
         emitStore(RA, 1, SP, s);
