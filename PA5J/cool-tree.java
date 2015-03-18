@@ -405,7 +405,6 @@ class method extends Feature {
 	expr.dump_with_types(out, n + 2);
     }
    
-    // don't like direct attr access
     public AbstractSymbol getName() {
         return name;
     }
@@ -416,9 +415,9 @@ class method extends Feature {
     
     public void code(CgenNode node, SymbolTable symbolTable, PrintStream s) {
         int tempVarNumber = expr.getTempNumber();
+        //System.out.println(node.getName().toString() + tempVarNumber);
+
         symbolTable.enterScope();
-        /* complex func, has to check temp var number, make 
-        the program.s work first */
         CgenSupport.emitMethodRef(node.getName(), name, s);
         s.print(CgenSupport.LABEL);
         CgenSupport.emitEnterFunc(tempVarNumber, s);
@@ -487,7 +486,11 @@ class attr extends Feature {
     }
 
     public void code(CgenNode node, SymbolTable symbolTable, PrintStream s) {
-        return;
+        if (init.get_type() != null) {
+            init.code(node, symbolTable, s);
+            int offset = ((Integer) symbolTable.lookup(name)).intValue();
+            CgenSupport.emitStore(CgenSupport.ACC, offset, CgenSupport.SELF, s);
+        }
     }
 
     public int getTempNumber() {
@@ -623,7 +626,9 @@ class assign extends Expression {
       * @param s the output stream 
       * */
     public void code(CgenNode node, SymbolTable symbolTable, PrintStream s) {
-        
+        expr.code(node, symbolTable, s);
+        int offset = ((Integer) symbolTable.lookup(name)).intValue();
+        CgenSupport.emitStore(CgenSupport.ACC, offset, CgenSupport.SELF);
     }
 
     public int getTempNumber() {
@@ -688,7 +693,20 @@ class static_dispatch extends Expression {
       * @param s the output stream 
       * */
     public void code(CgenNode node, SymbolTable symbolTable, PrintStream s) {
-        return;
+        if (AbstractSymbol.SELF_TYPE.equals(type_name)) {
+        
+        }
+        for (Enumeration e = actual.getElements(); e.hasMoreElements();) {
+            Expression actualExpr = (Expression) e.nextElement();
+            actualExpr.code(node, symbolTable, s);
+            CgenSupport.emitPush(CgenSupport.ACC, s);
+        }
+        expr.code(node, symbolTable, s);
+        int label = CgenSupport.getLabel();
+        int offset = node
+        // Edit stops here
+        
+
     }
 
     public int getTempNumber() {

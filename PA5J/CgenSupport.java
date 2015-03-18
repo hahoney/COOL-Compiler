@@ -117,6 +117,10 @@ class CgenSupport {
     final static String BLT     = "\tblt\t";
     final static String BGT     = "\tbgt\t";
 
+// user variables
+    public static int label = 0;
+    static int getLabel() { label++; return label - 1; }
+
     /** Emits an LW instruction.
      * @param dest_reg the destination register
      * @param offset the word offset from source register
@@ -617,6 +621,20 @@ class CgenSupport {
         emitAddiu(SP, SP, (3 + attrSizeByWord) * WORD_SIZE, s);
         emitReturn(s);
     }
+/*
+               bne     $a0 $zero label0
+               la      $a0 str_const0
+               li      $t1 1
+              jal     _dispatch_abort*/
+/*
+    public static void emitAbort(int label, int lineno, int index, String abortRoutine, PrintStream s) {
+        emitBne(ACC, ZERO, label, s);
+        emitLoadString(ACC, STRCONST_PREFIX + index);
+        emitLoadImm(T1, lineno, s);
+        emitJal(abortRoutine, s);
+    }
+*/
+    
 }
     
     

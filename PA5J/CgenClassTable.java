@@ -220,7 +220,6 @@ class CgenClassTable extends SymbolTable {
             str.print(CgenSupport.LABEL);
             // class tag
             str.println(CgenSupport.WORD + classTagNumber);
-            // count size: size = tag (1) + size (1) + disptab (1) + attrNum
             int attrNumber = 0;
             for (Enumeration e = pt.getFeatures().getElements(); e.hasMoreElements();) {
                 Feature feature = (Feature) e.nextElement();
@@ -237,9 +236,11 @@ class CgenClassTable extends SymbolTable {
             str.println("");
 
             // attr list
+            int attrOffset = CgenSupport.DEFAULT_OBJFIELDS;
             for (Enumeration e = pt.getFeatures().getElements(); e.hasMoreElements();) {
                 Feature feature = (Feature) e.nextElement();
                 if (feature instanceof attr) {
+                    addId(((attr)feature).getName(), new Integer(attrOffset++));
                     str.print(CgenSupport.WORD);
                     AbstractSymbol sym = feature.getType();
                     if (TreeConstants.Str.equals(sym)) {
@@ -261,26 +262,25 @@ class CgenClassTable extends SymbolTable {
 
     private void codeClassObjectInit() {
         for (Object c : nds) {
-            int attrSizeByWord = 0;
+            int attrInitNumber = 0;
             CgenNode node = (CgenNode) c;
-            // Scan attrs number
             for (Enumeration e = node.getFeatures().getElements(); e.hasMoreElements();) {
                 Feature feature = (Feature) e.nextElement();
                 if (feature instanceof attr) {
-                    attrSizeByWord++;
+                    int tempNumber = ((attr) feature).getTempNumber();
+                    attrInitNumber = attrInitNumber > tempNumber ? attrInitNumber : tempNumber;
                 }
             }
-
             CgenSupport.emitInitRef(node.getName(), str);
             str.print(CgenSupport.LABEL);
-            CgenSupport.emitEnterFunc(attrSizeByWord, str);
-            // Initialize parent
+            CgenSupport.emitEnterFunc(attrInitNumber, str);
+
             if (!TreeConstants.Object_.equals(node.getName())) {
                 str.print(CgenSupport.JAL);
                 CgenSupport.emitInitRef(node.getParentNd().getName(), str);
                 str.println("");
             }
-            // cgen attrs
+
             for (Enumeration e = node.getFeatures().getElements(); e.hasMoreElements();) {
                 Feature feature = (Feature) e.nextElement();
                 if (feature instanceof attr) {
@@ -289,15 +289,8 @@ class CgenClassTable extends SymbolTable {
             }
 
             CgenSupport.emitMove(CgenSupport.ACC, CgenSupport.SELF, str);
-            CgenSupport.emitExitFunc(attrSizeByWord, str);
-            /* I saw some error recovery code like, so the above 
-               return procedure should be replaced if dispatch
-               error occurs. TODO
-               bne     $a0 $zero label0
-               la      $a0 str_const0
-               li      $t1 1
-              jal     _dispatch_abort
-            */
+            CgenSupport.emitExitFunc(attrInitNumber, str);
+            //CgenSupport.emitAbort(CgenSupport.label, line_number);
         }
     }
 
