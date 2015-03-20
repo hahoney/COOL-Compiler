@@ -74,7 +74,7 @@ abstract class Feature extends TreeNode {
     public abstract void dump_with_types(PrintStream out, int n);
     public abstract AbstractSymbol getName();
     public abstract AbstractSymbol getType();
-    public abstract void code(CgenNode node, SymbolTable symbolTable, PrintStream s);
+    public abstract void code(CgenNode node, CgenClassTable classTable, PrintStream s);
 }
 
 
@@ -157,7 +157,7 @@ abstract class Expression extends TreeNode {
         else
             { out.println(Utilities.pad(n) + ": _no_type"); }
     }
-    public abstract void code(CgenNode node, SymbolTable symbolTable, PrintStream s);
+    public abstract void code(CgenNode node, CgenClassTable classTable, PrintStream s);
     public abstract int getTempNumber();
 
 }
@@ -197,7 +197,7 @@ abstract class Case extends TreeNode {
     }
     public abstract void dump_with_types(PrintStream out, int n);
     public abstract int getTempNumber();
-    public abstract void code(CgenNode node, SymbolTable symbolTable, PrintStream s);
+    public abstract void code(CgenNode node, CgenClassTable classTable, PrintStream s);
 
 }
 
@@ -413,21 +413,21 @@ class method extends Feature {
         return return_type;
     }
     
-    public void code(CgenNode node, SymbolTable symbolTable, PrintStream s) {
+    public void code(CgenNode node, CgenClassTable classTable, PrintStream s) {
         int tempVarNumber = expr.getTempNumber();
         //System.out.println(node.getName().toString() + tempVarNumber);
 
-        symbolTable.enterScope();
+        classTable.enterScope();
         CgenSupport.emitMethodRef(node.getName(), name, s);
         s.print(CgenSupport.LABEL);
         CgenSupport.emitEnterFunc(tempVarNumber, s);
 
         int totalVar = CgenSupport.DEFAULT_OBJFIELDS + tempVarNumber + formals.getLength();
         
-        expr.code(node, symbolTable, s);
+        expr.code(node, classTable, s);
         
         CgenSupport.emitExitFunc(tempVarNumber + formals.getLength(), s);
-        symbolTable.exitScope();
+        classTable.exitScope();
     }
 
     public int getTempNumber() {
@@ -485,10 +485,11 @@ class attr extends Feature {
         return type_decl;
     }
 
-    public void code(CgenNode node, SymbolTable symbolTable, PrintStream s) {
+    public void code(CgenNode node, CgenClassTable classTable, PrintStream s) {
         if (init.get_type() != null) {
-            init.code(node, symbolTable, s);
-            int offset = ((Integer) symbolTable.lookup(name)).intValue();
+            classTable.addId(name, classTable.lookup(type_decl));
+            init.code(node, classTable, s);
+            int offset = classTable.getFeatureOffset(name, node.getName(), false);
             CgenSupport.emitStore(CgenSupport.ACC, offset, CgenSupport.SELF, s);
         }
     }
@@ -580,7 +581,7 @@ class branch extends Case {
         return expr.getTempNumber();
     }
 
-    public void code(CgenNode node, SymbolTable symbolTable, PrintStream s) {
+    public void code(CgenNode node, CgenClassTable classTable, PrintStream s) {
     }
 
 }
@@ -612,7 +613,6 @@ class assign extends Expression {
         expr.dump(out, n+2);
     }
 
-    
     public void dump_with_types(PrintStream out, int n) {
         dump_line(out, n);
         out.println(Utilities.pad(n) + "_assign");
@@ -625,10 +625,10 @@ class assign extends Expression {
       * you wish.)
       * @param s the output stream 
       * */
-    public void code(CgenNode node, SymbolTable symbolTable, PrintStream s) {
-        expr.code(node, symbolTable, s);
-        int offset = ((Integer) symbolTable.lookup(name)).intValue();
-        CgenSupport.emitStore(CgenSupport.ACC, offset, CgenSupport.SELF);
+    public void code(CgenNode node, CgenClassTable classTable, PrintStream s) {
+        expr.code(node, classTable, s);
+        int offset = ((Integer) classTable.lookup(name)).intValue();
+        CgenSupport.emitStore(CgenSupport.ACC, offset, CgenSupport.SELF, s);
     }
 
     public int getTempNumber() {
@@ -673,7 +673,6 @@ class static_dispatch extends Expression {
         actual.dump(out, n+2);
     }
 
-    
     public void dump_with_types(PrintStream out, int n) {
         dump_line(out, n);
         out.println(Utilities.pad(n) + "_static_dispatch");
@@ -692,21 +691,29 @@ class static_dispatch extends Expression {
       * you wish.)
       * @param s the output stream 
       * */
-    public void code(CgenNode node, SymbolTable symbolTable, PrintStream s) {
-        if (AbstractSymbol.SELF_TYPE.equals(type_name)) {
-        
-        }
+    public void code(CgenNode node, CgenClassTable classTable, PrintStream s) {
         for (Enumeration e = actual.getElements(); e.hasMoreElements();) {
             Expression actualExpr = (Expression) e.nextElement();
-            actualExpr.code(node, symbolTable, s);
+            actualExpr.code(node, classTable, s);
             CgenSupport.emitPush(CgenSupport.ACC, s);
         }
-        expr.code(node, symbolTable, s);
+        expr.code(node, classTable, s);
         int label = CgenSupport.getLabel();
-        int offset = node
-        // Edit stops here
+        // lookup dispatch table
+        CgenSupport.emitLoad(CgenSupport.ACC, CgenSupport.DISPTABLE_OFFSET + 1, CgenSupport.SELF, s);
+        CgenSupport.emitAbort(label, getLineNumber(), (StringSymbol) node.getFilename(), CgenSupport.DISPATCH_ABORT, s);
         
+        CgenSupport.emitLabelDef(label, s);
+        CgenSupport.emitPartialLoadAddress(CgenSupport.T1, s);
+        CgenSupport.emitDispTableRef(type_name, s);
+        s.println("");
 
+        
+        int offset = classTable.getFeatureOffset(name, type_name, true);
+        //System.out.println(name.toString() + " " + type_name.toString() + " " + offset);
+        assert(offset >= 0);
+        CgenSupport.emitLoad(CgenSupport.T1, offset, CgenSupport.T1, s);
+        CgenSupport.emitJalr(CgenSupport.T1, s);
     }
 
     public int getTempNumber() {
@@ -770,7 +777,28 @@ class dispatch extends Expression {
       * you wish.)
       * @param s the output stream 
       * */
-    public void code(CgenNode node, SymbolTable symbolTable, PrintStream s) {
+    public void code(CgenNode node, CgenClassTable classTable, PrintStream s) {
+        for (Enumeration e = actual.getElements(); e.hasMoreElements();) {
+            Expression actualExpr = (Expression) e.nextElement();
+            actualExpr.code(node, classTable, s);
+            CgenSupport.emitPush(CgenSupport.ACC, s);
+        }
+        expr.code(node, classTable, s);
+        int label = CgenSupport.getLabel();
+        // lookup dispatch table
+        CgenSupport.emitLoad(CgenSupport.ACC, CgenSupport.DISPTABLE_OFFSET + 1, CgenSupport.SELF, s);
+        s.println("");
+        CgenSupport.emitAbort(label, getLineNumber(), (StringSymbol) node.getFilename(), CgenSupport.DISPATCH_ABORT, s);
+        
+        CgenSupport.emitLabelDef(label, s);
+        CgenSupport.emitPartialLoadAddress(CgenSupport.T1, s);
+        CgenSupport.emitDispTableRef(get_type(), s);
+        s.println("");
+
+        
+        int offset = classTable.getFeatureOffset(name, get_type(), true);
+        CgenSupport.emitLoad(CgenSupport.T1, offset, CgenSupport.T1, s);
+        CgenSupport.emitJalr(CgenSupport.T1, s);
     }
 
     public int getTempNumber() {
@@ -829,7 +857,7 @@ class cond extends Expression {
       * you wish.)
       * @param s the output stream 
       * */
-    public void code(CgenNode node, SymbolTable symbolTable, PrintStream s) {
+    public void code(CgenNode node, CgenClassTable classTable, PrintStream s) {
     }
 
     public int getTempNumber() {
@@ -881,7 +909,7 @@ class loop extends Expression {
       * you wish.)
       * @param s the output stream 
       * */
-    public void code(CgenNode node, SymbolTable symbolTable, PrintStream s) {
+    public void code(CgenNode node, CgenClassTable classTable, PrintStream s) {
     }
 
     public int getTempNumber() {
@@ -932,7 +960,7 @@ class typcase extends Expression {
       * you wish.)
       * @param s the output stream 
       * */
-    public void code(CgenNode node, SymbolTable symbolTable, PrintStream s) {
+    public void code(CgenNode node, CgenClassTable classTable, PrintStream s) {
     }
 
     public int getTempNumber() {
@@ -982,7 +1010,7 @@ class block extends Expression {
       * you wish.)
       * @param s the output stream 
       * */
-    public void code(CgenNode node, SymbolTable symbolTable, PrintStream s) {
+    public void code(CgenNode node, CgenClassTable classTable, PrintStream s) {
     }
 
     public int getTempNumber() {
@@ -1045,7 +1073,7 @@ class let extends Expression {
       * you wish.)
       * @param s the output stream 
       * */
-    public void code(CgenNode node, SymbolTable symbolTable, PrintStream s) {
+    public void code(CgenNode node, CgenClassTable classTable, PrintStream s) {
     }
 
     public int getTempNumber() {
@@ -1093,7 +1121,7 @@ class plus extends Expression {
       * you wish.)
       * @param s the output stream 
       * */
-    public void code(CgenNode node, SymbolTable symbolTable, PrintStream s) {
+    public void code(CgenNode node, CgenClassTable classTable, PrintStream s) {
     }
 
     public int getTempNumber() {
@@ -1141,7 +1169,7 @@ class sub extends Expression {
       * you wish.)
       * @param s the output stream 
       * */
-    public void code(CgenNode node, SymbolTable symbolTable, PrintStream s) {
+    public void code(CgenNode node, CgenClassTable classTable, PrintStream s) {
     }
 
     public int getTempNumber() {
@@ -1189,7 +1217,7 @@ class mul extends Expression {
       * you wish.)
       * @param s the output stream 
       * */
-    public void code(CgenNode node, SymbolTable symbolTable, PrintStream s) {
+    public void code(CgenNode node, CgenClassTable classTable, PrintStream s) {
     }
 
     public int getTempNumber() {
@@ -1238,7 +1266,7 @@ class divide extends Expression {
       * you wish.)
       * @param s the output stream 
       * */
-    public void code(CgenNode node, SymbolTable symbolTable, PrintStream s) {
+    public void code(CgenNode node, CgenClassTable classTable, PrintStream s) {
     }
 
     public int getTempNumber() {
@@ -1282,7 +1310,7 @@ class neg extends Expression {
       * you wish.)
       * @param s the output stream 
       * */
-    public void code(CgenNode node, SymbolTable symbolTable, PrintStream s) {
+    public void code(CgenNode node, CgenClassTable classTable, PrintStream s) {
     }
 
     public int getTempNumber() {
@@ -1330,7 +1358,7 @@ class lt extends Expression {
       * you wish.)
       * @param s the output stream 
       * */
-    public void code(CgenNode node, SymbolTable symbolTable, PrintStream s) {
+    public void code(CgenNode node, CgenClassTable classTable, PrintStream s) {
     }
 
     public int getTempNumber() {
@@ -1378,7 +1406,7 @@ class eq extends Expression {
       * you wish.)
       * @param s the output stream 
       * */
-    public void code(CgenNode node, SymbolTable symbolTable, PrintStream s) {
+    public void code(CgenNode node, CgenClassTable classTable, PrintStream s) {
     }
 
     public int getTempNumber() {
@@ -1426,7 +1454,7 @@ class leq extends Expression {
       * you wish.)
       * @param s the output stream 
       * */
-    public void code(CgenNode node, SymbolTable symbolTable, PrintStream s) {
+    public void code(CgenNode node, CgenClassTable classTable, PrintStream s) {
     }
 
     public int getTempNumber() {
@@ -1470,7 +1498,7 @@ class comp extends Expression {
       * you wish.)
       * @param s the output stream 
       * */
-    public void code(CgenNode node, SymbolTable symbolTable, PrintStream s) {
+    public void code(CgenNode node, CgenClassTable classTable, PrintStream s) {
     }
 
     public int getTempNumber() {
@@ -1512,7 +1540,7 @@ class int_const extends Expression {
       * to you as an example of code generation.
       * @param s the output stream 
       * */
-    public void code(CgenNode node, SymbolTable symbolTable, PrintStream s) {
+    public void code(CgenNode node, CgenClassTable classTable, PrintStream s) {
 	CgenSupport.emitLoadInt(CgenSupport.ACC,
                                 (IntSymbol)AbstractTable.inttable.lookup(token.getString()), s);
     }
@@ -1557,7 +1585,7 @@ class bool_const extends Expression {
       * to you as an example of code generation.
       * @param s the output stream 
       * */
-    public void code(CgenNode node, SymbolTable symbolTable, PrintStream s) {
+    public void code(CgenNode node, CgenClassTable classTable, PrintStream s) {
 	CgenSupport.emitLoadBool(CgenSupport.ACC, new BoolConst(val), s);
     }
 
@@ -1602,7 +1630,7 @@ class string_const extends Expression {
       * to you as an example of code generation.
       * @param s the output stream 
       * */
-    public void code(CgenNode node, SymbolTable symbolTable, PrintStream s) {
+    public void code(CgenNode node, CgenClassTable classTable, PrintStream s) {
 	CgenSupport.emitLoadString(CgenSupport.ACC,
                                    (StringSymbol)AbstractTable.stringtable.lookup(token.getString()), s);
     }
@@ -1647,7 +1675,21 @@ class new_ extends Expression {
       * you wish.)
       * @param s the output stream 
       * */
-    public void code(CgenNode node, SymbolTable symbolTable, PrintStream s) {
+    public void code(CgenNode node, CgenClassTable classTable, PrintStream s) {
+        /*        
+        la      $a0 IO_protObj
+        jal     Object.copy
+        jal     IO_init
+        */
+         CgenSupport.emitPartialLoadAddress(CgenSupport.ACC, s);
+         CgenSupport.emitProtObjRef(type_name, s);
+         s.println("");
+         s.print(CgenSupport.JAL);
+         CgenSupport.emitMethodRef(TreeConstants.Object_, TreeConstants.copy, s);
+         s.println("");
+         s.print(CgenSupport.JAL);
+         CgenSupport.emitInitRef(type_name, s);
+         s.println("");
     }
 
     public int getTempNumber() {
@@ -1690,7 +1732,7 @@ class isvoid extends Expression {
       * you wish.)
       * @param s the output stream 
       * */
-    public void code(CgenNode node, SymbolTable symbolTable, PrintStream s) {
+    public void code(CgenNode node, CgenClassTable classTable, PrintStream s) {
     }
 
     public int getTempNumber() {
@@ -1728,7 +1770,7 @@ class no_expr extends Expression {
       * you wish.)
       * @param s the output stream 
       * */
-    public void code(CgenNode node, SymbolTable symbolTable, PrintStream s) {
+    public void code(CgenNode node, CgenClassTable classTable, PrintStream s) {
     }
 
     public int getTempNumber() {
@@ -1758,8 +1800,7 @@ class object extends Expression {
         out.print(Utilities.pad(n) + "object\n");
         dump_AbstractSymbol(out, n+2, name);
     }
-
-    
+ 
     public void dump_with_types(PrintStream out, int n) {
         dump_line(out, n);
         out.println(Utilities.pad(n) + "_object");
@@ -1771,7 +1812,8 @@ class object extends Expression {
       * you wish.)
       * @param s the output stream 
       * */
-    public void code(CgenNode node, SymbolTable symbolTable, PrintStream s) {
+    public void code(CgenNode node, CgenClassTable classTable, PrintStream s) {
+                //lw      $a0 12($s0)
     }
 
     public int getTempNumber() {

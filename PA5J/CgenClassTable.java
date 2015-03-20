@@ -26,6 +26,8 @@ import java.util.Vector;
 import java.util.Enumeration;
 
 import java.util.Stack;
+import java.util.List;
+import java.util.ArrayList;
 
 /** This class is used for representing the inheritance tree during code
     generation. You will need to fill in some of its methods and
@@ -240,7 +242,8 @@ class CgenClassTable extends SymbolTable {
             for (Enumeration e = pt.getFeatures().getElements(); e.hasMoreElements();) {
                 Feature feature = (Feature) e.nextElement();
                 if (feature instanceof attr) {
-                    addId(((attr)feature).getName(), new Integer(attrOffset++));
+                    //addId(((attr)feature).getName(), new Integer(attrOffset++));
+                    attrOffset++;
                     str.print(CgenSupport.WORD);
                     AbstractSymbol sym = feature.getType();
                     if (TreeConstants.Str.equals(sym)) {
@@ -262,6 +265,7 @@ class CgenClassTable extends SymbolTable {
 
     private void codeClassObjectInit() {
         for (Object c : nds) {
+            enterScope();
             int attrInitNumber = 0;
             CgenNode node = (CgenNode) c;
             for (Enumeration e = node.getFeatures().getElements(); e.hasMoreElements();) {
@@ -290,12 +294,13 @@ class CgenClassTable extends SymbolTable {
 
             CgenSupport.emitMove(CgenSupport.ACC, CgenSupport.SELF, str);
             CgenSupport.emitExitFunc(attrInitNumber, str);
-            //CgenSupport.emitAbort(CgenSupport.label, line_number);
         }
     }
 
     private void codeClassMethod() {
-        for (Object c : nds) {
+        List<CgenNode> list = new ArrayList<CgenNode>(nds);
+        list = reverseNds(list);
+        for (Object c : list) {
             CgenNode node = (CgenNode) c;
             if (!node.basic()) {
                 for (Enumeration e = node.getFeatures().getElements(); e.hasMoreElements();) {
@@ -305,7 +310,9 @@ class CgenClassTable extends SymbolTable {
                     }
                 }
             }
+            exitScope();
         }
+        
     }
 
     /** Creates data structures representing basic Cool classes (Object,
@@ -591,6 +598,61 @@ class CgenClassTable extends SymbolTable {
 	return (CgenNode)probe(TreeConstants.Object_);
     }
 
+    /* Need some utilities to find features as I wrote in the type checking */
+    // get feature from curClass or its nearest ancestor
+    // The class names are installed in two ways. One is to nds for CgenNode only
+    // Two is to the symbolTable as (name, nd) name as AbstractSymbol and nd as CgenNode
+ 
+    // find right method bottom to up find index top to bottom. find the index of last occurance
+    public int getFeatureOffset(AbstractSymbol featureName, AbstractSymbol className, boolean isMethod) {
+        int methodCount = -1;
+        int lastOccurance = -1;
+        if (lookup(className) != null) {
+            List<CgenNode> classAncestors = reverseNds(getInheritance(className));
+            for (CgenNode node : classAncestors) {
+                Features features = node.getFeatures();
+                if (features != null) {
+                    for (Enumeration e = features.getElements(); e.hasMoreElements();) {
+                        methodCount++;
+                        Feature feature = (Feature) e.nextElement();
+                        if (feature.getName().equals(featureName)) {
+                            if ((feature instanceof method && isMethod) ||
+                                (feature instanceof attr && !isMethod)) {
+                                lastOccurance = methodCount;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        return lastOccurance;
+    }
+   
+    // Get all ancestor nodes from top to bottom
+    private List<CgenNode> getInheritance(AbstractSymbol className) {
+        List<CgenNode> result = new ArrayList<CgenNode>();
+        CgenNode pt = (CgenNode) lookup(className);
+
+        if (pt == null) { return result; }         
+        while (!TreeConstants.No_class.equals(pt.getName())) {
+            result.add(pt);
+            pt = pt.getParentNd();
+        }
+        return result;
+    }
+
+    private List<CgenNode> reverseNds(List<CgenNode> nds) {
+        Stack<CgenNode> stack = new Stack<CgenNode>();
+        for (CgenNode e : nds) {
+            stack.push(e);
+        }
+        List<CgenNode> result = new ArrayList<CgenNode>();
+        while (!stack.isEmpty()) {
+            result.add(stack.pop());
+        }
+        return result;      
+    }
+    
 }
 			  
     

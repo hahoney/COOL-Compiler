@@ -615,9 +615,9 @@ class CgenSupport {
         jr      $ra
 */
     public static void emitExitFunc(int attrSizeByWord, PrintStream s) {
-        emitLoad(RA, 1, SP, s);
-        emitLoad(SELF, 2, SP, s);
         emitLoad(FP, 3, SP, s);
+        emitLoad(SELF, 2, SP, s);
+        emitLoad(RA, 1, SP, s);
         emitAddiu(SP, SP, (3 + attrSizeByWord) * WORD_SIZE, s);
         emitReturn(s);
     }
@@ -626,14 +626,15 @@ class CgenSupport {
                la      $a0 str_const0
                li      $t1 1
               jal     _dispatch_abort*/
-/*
-    public static void emitAbort(int label, int lineno, int index, String abortRoutine, PrintStream s) {
+
+    static final String DISPATCH_ABORT = "_dispatch_abort";
+
+    public static void emitAbort(int label, int lineno, StringSymbol filename, String abortRoutine, PrintStream s) {
         emitBne(ACC, ZERO, label, s);
-        emitLoadString(ACC, STRCONST_PREFIX + index);
+        emitLoadString(ACC, filename, s);
         emitLoadImm(T1, lineno, s);
         emitJal(abortRoutine, s);
     }
-*/
     
 }
     
