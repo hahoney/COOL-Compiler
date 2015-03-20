@@ -82,6 +82,8 @@ class CgenSupport {
     final static String ACC = "$a0";		// Accumulator 
     final static String A1  = "$a1";		// For arguments to prim funcs 
     final static String SELF= "$s0";		// Ptr to self (callee saves) 
+    final static String S1=   "$s1";		// Dont know what S1 does but it is used in cool generated code and it 
+    // cannot be replaced by other regs
     final static String T1  = "$t1";		// Temporary 1 
     final static String T2  = "$t2";            // Temporary 2 
     final static String T3  = "$t3";            // Temporary 3 
@@ -600,9 +602,9 @@ class CgenSupport {
 */
     public static void emitEnterFunc(int size, PrintStream s) {
         emitAddiu(SP, SP, -(size + DEFAULT_OBJFIELDS) * WORD_SIZE, s);
-        emitStore(FP, 3, SP, s);
-        emitStore(SELF, 2, SP, s);
-        emitStore(RA, 1, SP, s);
+        emitStore(FP, 3 + size, SP, s);
+        emitStore(SELF, 2 + size, SP, s);
+        emitStore(RA, 1 + size, SP, s);
         emitAddiu(FP, SP, WORD_SIZE, s);
         emitMove(SELF, ACC, s);
     }
@@ -614,11 +616,11 @@ class CgenSupport {
         addiu   $sp $sp 12
         jr      $ra
 */
-    public static void emitExitFunc(int attrSizeByWord, PrintStream s) {
-        emitLoad(FP, 3, SP, s);
-        emitLoad(SELF, 2, SP, s);
-        emitLoad(RA, 1, SP, s);
-        emitAddiu(SP, SP, (3 + attrSizeByWord) * WORD_SIZE, s);
+    public static void emitExitFunc(int size, PrintStream s) {
+        emitLoad(FP, 3 + size, SP, s);
+        emitLoad(SELF, 2 + size, SP, s);
+        emitLoad(RA, 1 + size, SP, s);
+        emitAddiu(SP, SP, (3 + size) * WORD_SIZE, s);
         emitReturn(s);
     }
 /*
@@ -634,6 +636,14 @@ class CgenSupport {
         emitLoadString(ACC, filename, s);
         emitLoadImm(T1, lineno, s);
         emitJal(abortRoutine, s);
+    }
+
+    public static int max(int a, int b) {
+        return a > b ? a : b;
+    }
+
+    public static void printClassOffset(AbstractSymbol className, AbstractSymbol featureName, int offset) {
+        System.out.println("Class: " + className + " Feature Name: " + featureName + " offset: " + offset);
     }
     
 }

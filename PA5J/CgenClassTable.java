@@ -268,16 +268,16 @@ class CgenClassTable extends SymbolTable {
             enterScope();
             int attrInitNumber = 0;
             CgenNode node = (CgenNode) c;
-            for (Enumeration e = node.getFeatures().getElements(); e.hasMoreElements();) {
+            /*for (Enumeration e = node.getFeatures().getElements(); e.hasMoreElements();) {
                 Feature feature = (Feature) e.nextElement();
                 if (feature instanceof attr) {
                     int tempNumber = ((attr) feature).getTempNumber();
-                    attrInitNumber = attrInitNumber > tempNumber ? attrInitNumber : tempNumber;
+                    attrInitNumber = CgenSupport.max(attrInitNumber, tempNumber);
                 }
-            }
+            }*/
             CgenSupport.emitInitRef(node.getName(), str);
             str.print(CgenSupport.LABEL);
-            CgenSupport.emitEnterFunc(attrInitNumber, str);
+            CgenSupport.emitEnterFunc(0, str);
 
             if (!TreeConstants.Object_.equals(node.getName())) {
                 str.print(CgenSupport.JAL);
@@ -293,7 +293,7 @@ class CgenClassTable extends SymbolTable {
             }
 
             CgenSupport.emitMove(CgenSupport.ACC, CgenSupport.SELF, str);
-            CgenSupport.emitExitFunc(attrInitNumber, str);
+            CgenSupport.emitExitFunc(0, str);
         }
     }
 
@@ -627,6 +627,7 @@ class CgenClassTable extends SymbolTable {
         }
         return lastOccurance;
     }
+
    
     // Get all ancestor nodes from top to bottom
     private List<CgenNode> getInheritance(AbstractSymbol className) {
