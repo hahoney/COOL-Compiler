@@ -415,9 +415,7 @@ class method extends Feature {
     
     public void code(CgenNode node, CgenClassTable classTable, PrintStream s) {
         int tempVarNumber = expr.getTempNumber();
-        System.out.println(node.getName().toString() + tempVarNumber);
-
-        classTable.enterScope();
+        //System.out.println(node.getName().toString() + tempVarNumber);
         CgenSupport.emitMethodRef(node.getName(), name, s);
         s.print(CgenSupport.LABEL);
         CgenSupport.emitEnterFunc(tempVarNumber, s);
@@ -427,7 +425,6 @@ class method extends Feature {
         expr.code(node, classTable, 0, s);
         
         CgenSupport.emitExitFunc(tempVarNumber + formals.getLength(), s);
-        classTable.exitScope();
     }
 
     public int getTempNumber() {
@@ -476,7 +473,6 @@ class attr extends Feature {
 	init.dump_with_types(out, n + 2);
     }
 
-    // don't like direct attr access
     public AbstractSymbol getName() {
         return name;
     }
@@ -486,10 +482,14 @@ class attr extends Feature {
     }
 
     public void code(CgenNode node, CgenClassTable classTable, PrintStream s) {
+        AbstractSymbol attrType = type_decl;
+        if (TreeConstants.SELF_TYPE.equals(type_decl) || TreeConstants.self.equals(name)) {
+            attrType = node.getName();
+        } 
         if (init.get_type() != null) {
             classTable.addId(name, classTable.lookup(type_decl));
             init.code(node, classTable, 0, s);
-            int offset = classTable.getFeatureOffset(name, node.getName(), false);
+            int offset = classTable.getFeatureOffset(name, attrType, false);
             CgenSupport.emitStore(CgenSupport.ACC, offset, CgenSupport.SELF, s);
         }
     }
@@ -627,7 +627,11 @@ class assign extends Expression {
       * */
     public void code(CgenNode node, CgenClassTable classTable, int curTemp, PrintStream s) {
         expr.code(node, classTable, curTemp, s);
-        int offset = ((Integer) classTable.lookup(name)).intValue();
+        AbstractSymbol typeName = expr.get_type();
+        if (TreeConstants.SELF_TYPE.equals(typeName)) {
+            typeName = node.getName();
+        }
+        int offset = classTable.getFeatureOffset(name, typeName, false);
         CgenSupport.emitStore(CgenSupport.ACC, offset, CgenSupport.SELF, s);
     }
 
@@ -692,6 +696,11 @@ class static_dispatch extends Expression {
       * @param s the output stream 
       * */
     public void code(CgenNode node, CgenClassTable classTable, int curTemp, PrintStream s) {
+        AbstractSymbol dispType = type_name;
+        if (TreeConstants.SELF_TYPE.equals(dispType)) { 
+            dispType = node.getName();
+        }
+
         int tempVar = 0;
         for (Enumeration e = actual.getElements(); e.hasMoreElements();) {
             Expression actualExpr = (Expression) e.nextElement();            
@@ -711,11 +720,9 @@ class static_dispatch extends Expression {
         
         CgenSupport.emitLabelDef(label, s);
         CgenSupport.emitPartialLoadAddress(CgenSupport.T1, s);
-        CgenSupport.emitDispTableRef(type_name, s);
+        CgenSupport.emitDispTableRef(dispType, s);
         s.println("");
-
-        
-        int offset = classTable.getFeatureOffset(name, type_name, true);
+        int offset = classTable.getFeatureOffset(name, dispType, true);
         assert(offset >= 0);
         CgenSupport.emitLoad(CgenSupport.T1, offset, CgenSupport.T1, s);
         CgenSupport.emitJalr(CgenSupport.T1, s);
@@ -783,6 +790,8 @@ class dispatch extends Expression {
       * @param s the output stream 
       * */
     public void code(CgenNode node, CgenClassTable classTable, int curTemp, PrintStream s) {
+        AbstractSymbol dispType = expr instanceof no_expr ? node.getName() : expr.get_type();
+        dispType = TreeConstants.SELF_TYPE.equals(dispType) ? node.getName() : dispType;
         int tempVar = 0;
         for (Enumeration e = actual.getElements(); e.hasMoreElements();) {
             Expression actualExpr = (Expression) e.nextElement();
@@ -797,16 +806,13 @@ class dispatch extends Expression {
 
         int label = CgenSupport.getLabel();
         // lookup dispatch table
-        //CgenSupport.emitLoad(CgenSupport.ACC, CgenSupport.DISPTABLE_OFFSET + 1, CgenSupport.SELF, s);
         CgenSupport.emitAbort(label, getLineNumber(), (StringSymbol) node.getFilename(), CgenSupport.DISPATCH_ABORT, s);
         
         CgenSupport.emitLabelDef(label, s);
         CgenSupport.emitPartialLoadAddress(CgenSupport.T1, s);
-        CgenSupport.emitDispTableRef(get_type(), s);
+        CgenSupport.emitDispTableRef(dispType, s);
         s.println("");
-
-        
-        int offset = classTable.getFeatureOffset(name, get_type(), true);
+        int offset = classTable.getFeatureOffset(name, dispType, true);
         CgenSupport.emitLoad(CgenSupport.T1, offset, CgenSupport.T1, s);
         CgenSupport.emitJalr(CgenSupport.T1, s);
     }
@@ -1914,15 +1920,13 @@ class object extends Expression {
       * @param s the output stream 
       * */
     public void code(CgenNode node, CgenClassTable classTable, int curTemp, PrintStream s) {
-                //lw      $a0 12($s0)
         String reg = curTemp > 0 ? CgenSupport.ACC : CgenSupport.SELF;
-        int offset = classTable.getFeatureOffset(name, node.getName(), false);
-        CgenSupport.printClassOffset(node.getName(), name, offset);
-        if (offset < 0) {
-            CgenSupport.emitLoad(CgenSupport.ACC, CgenSupport.DEFAULT_OBJFIELDS + curTemp, reg, s);
-        } else {
-            CgenSupport.emitLoad(CgenSupport.ACC, offset, reg, s);
+        AbstractSymbol typeName = get_type();
+        if (TreeConstants.SELF_TYPE.equals(typeName)) {
+            return;
         }
+        int offset = classTable.getFeatureOffset(name, typeName, false);
+        CgenSupport.emitLoad(CgenSupport.ACC, offset, reg, s);
     }
 
     public int getTempNumber() {

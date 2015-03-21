@@ -242,7 +242,6 @@ class CgenClassTable extends SymbolTable {
             for (Enumeration e = pt.getFeatures().getElements(); e.hasMoreElements();) {
                 Feature feature = (Feature) e.nextElement();
                 if (feature instanceof attr) {
-                    //addId(((attr)feature).getName(), new Integer(attrOffset++));
                     attrOffset++;
                     str.print(CgenSupport.WORD);
                     AbstractSymbol sym = feature.getType();
@@ -265,7 +264,6 @@ class CgenClassTable extends SymbolTable {
 
     private void codeClassObjectInit() {
         for (Object c : nds) {
-            enterScope();
             int attrInitNumber = 0;
             CgenNode node = (CgenNode) c;
             /*for (Enumeration e = node.getFeatures().getElements(); e.hasMoreElements();) {
@@ -288,6 +286,7 @@ class CgenClassTable extends SymbolTable {
             for (Enumeration e = node.getFeatures().getElements(); e.hasMoreElements();) {
                 Feature feature = (Feature) e.nextElement();
                 if (feature instanceof attr) {
+                    addId(feature.getName(), lookup(feature.getType()));
                     ((attr) feature).code(node, this, str);
                 }
             }
@@ -310,7 +309,6 @@ class CgenClassTable extends SymbolTable {
                     }
                 }
             }
-            exitScope();
         }
         
     }
@@ -607,7 +605,7 @@ class CgenClassTable extends SymbolTable {
     public int getFeatureOffset(AbstractSymbol featureName, AbstractSymbol className, boolean isMethod) {
         int methodCount = -1;
         int lastOccurance = -1;
-        if (lookup(className) != null) {
+        if (lookup(className) != null) { 
             List<CgenNode> classAncestors = reverseNds(getInheritance(className));
             for (CgenNode node : classAncestors) {
                 Features features = node.getFeatures();
@@ -633,8 +631,7 @@ class CgenClassTable extends SymbolTable {
     private List<CgenNode> getInheritance(AbstractSymbol className) {
         List<CgenNode> result = new ArrayList<CgenNode>();
         CgenNode pt = (CgenNode) lookup(className);
-
-        if (pt == null) { return result; }         
+        if (pt == null) { return result; }    
         while (!TreeConstants.No_class.equals(pt.getName())) {
             result.add(pt);
             pt = pt.getParentNd();
