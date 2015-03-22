@@ -617,9 +617,9 @@ class CgenSupport {
         jr      $ra
 */
     public static void emitExitFunc(int size, PrintStream s) {
-        emitLoad(FP, 3 + size, SP, s);
-        emitLoad(SELF, 2 + size, SP, s);
-        emitLoad(RA, 1 + size, SP, s);
+        emitLoad(FP, 3, SP, s);
+        emitLoad(SELF, 2, SP, s);
+        emitLoad(RA, 1, SP, s);
         emitAddiu(SP, SP, (3 + size) * WORD_SIZE, s);
         emitReturn(s);
     }
@@ -632,6 +632,7 @@ class CgenSupport {
     static final String DISPATCH_ABORT = "_dispatch_abort";
 
     public static void emitAbort(int label, int lineno, StringSymbol filename, String abortRoutine, PrintStream s) {
+        //emitMove(ACC, SELF, s);       
         emitBne(ACC, ZERO, label, s);
         emitLoadString(ACC, filename, s);
         emitLoadImm(T1, lineno, s);
@@ -644,6 +645,10 @@ class CgenSupport {
 
     public static void printClassOffset(AbstractSymbol className, AbstractSymbol featureName, int offset) {
         System.out.println("Class: " + className + " Feature Name: " + featureName + " offset: " + offset);
+    }
+
+    public static String getReg(int regInt) {
+        return regInt > 0 ? S1 : ACC;
     }
     
 }

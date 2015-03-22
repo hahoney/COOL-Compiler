@@ -393,6 +393,10 @@ class ClassTable {
     public boolean errors() {
 	return semantErrors != 0;
     }
+
+    public class_c getClass(AbstractSymbol className) {  
+        return classTableMap.get(className);
+    }
 }
 			  
     

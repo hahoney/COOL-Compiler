@@ -29,7 +29,6 @@ abstract class Class_ extends TreeNode {
         super(lineNumber);
     }
     public abstract void dump_with_types(PrintStream out, int n);
-    // Yi Zhang
     public abstract void semant(ClassTable classTable);
     public abstract void scanFeatures(ClassTable classTable);
 }
@@ -281,7 +280,6 @@ class programc extends Program {
         for (Enumeration e = classTable.getAllClasses().getElements(); e.hasMoreElements();) {
             ((Class_) e.nextElement()).scanFeatures(classTable);
         }
-        //classTable.dumpFeatures();
         
 	/* some semantic analysis code may go here */
         for (Enumeration e = classes.getElements(); e.hasMoreElements();) {
@@ -387,6 +385,8 @@ class method extends Feature {
     protected Formals formals;
     protected AbstractSymbol return_type;
     protected Expression expr;
+
+    protected AbstractSymbol hiddenType;
     /** Creates "method" AST node. 
       *
       * @param lineNumber the line in the source file from which this node came.
@@ -401,6 +401,7 @@ class method extends Feature {
         formals = a2;
         return_type = a3;
         expr = a4;
+        hiddenType = return_type;
     }
     public TreeNode copy() {
         return new method(lineNumber, copy_AbstractSymbol(name), (Formals)formals.copy(), copy_AbstractSymbol(return_type), (Expression)expr.copy());
@@ -438,7 +439,11 @@ class method extends Feature {
     public Formals getFormals() {
         return formals;
     }
- 
+
+    public AbstractSymbol getHiddenType() {
+        return hiddenType;
+    }
+
     @Override
     public void semant(ClassTable classTable, SymbolTable symbolTable, class_c curClass, boolean firstScan) {
         symbolTable.enterScope();
@@ -485,14 +490,24 @@ class method extends Feature {
 
         exprType = TreeConstants.No_type.equals(exprType) ? return_type : exprType;
         // if return type is self, inferred return type shoud stay unconverted. Otherwise conver self
+
+        // case 1: ID:SELF {self} return SELF_TYPE
+        // case 2: ID:XXX {self} return SELF_TYPE;
+        // case 3: ID:SELF {XXX} this is wrong
+        ///            A     B   
+        //         A  return_type   B  exprType
+        if (TreeConstants.SELF_TYPE.equals(exprType)) {
+            hiddenType = TreeConstants.SELF_TYPE;
+        }
+
         if (!TreeConstants.SELF_TYPE.equals(return_type)) {
             exprType = TreeConstants.SELF_TYPE.equals(exprType) ? curClass.getName() : exprType;
         }
+ 
         if (!classTable.isSubtype(exprType, return_type)) {
             classTable.semantError(curClass).println("Inferred return type " + 
                        exprType.toString() + " of method " + name.toString() + 
                        " does not conform to declared return type " + return_type.toString() + ".");
-            
         }
     }
 
@@ -882,7 +897,14 @@ class static_dispatch extends Expression {
                               declType.toString() + ".");
                     }
                 }
-                return set_type(dispatchMethod.getType()); 
+                AbstractSymbol retType = dispatchMethod.getType();
+                if (TreeConstants.SELF_TYPE.equals(retType) ||
+                    (TreeConstants.SELF_TYPE.equals(dispatchMethod.getHiddenType()) && !TreeConstants.SELF_TYPE.equals(exprType))) {
+                    retType = type_name;
+                }
+                return set_type(retType);
+
+                //return set_type(dispatchMethod.getType()); 
             }
         }
         return set_type(TreeConstants.No_type);
@@ -963,16 +985,25 @@ class dispatch extends Expression {
                     Formal decl = (Formal) d.nextElement();            
                     AbstractSymbol declName = decl.getName();
                     AbstractSymbol declType = decl.getType();
-
                     AbstractSymbol evalActualType = TreeConstants.SELF_TYPE.equals(actualType) ? curClass.getName() : actualType;
                     if (!classTable.isSubtype(evalActualType, declType)) { 
                         classTable.semantError(curClass).println("In call of method " +
                               name.toString() + ", type " + actualType.toString() + " of parameter " +
                               declName.toString() + " does not conform to declared type " + 
                               declType.toString() + ".");
-                    }
+                    } 
                 }
-                AbstractSymbol retType = TreeConstants.SELF_TYPE.equals(dispatchMethod.getType()) ? exprType : dispatchMethod.getType();
+                // if method type is self then return expr type
+                // or the expr return type is self and dispatchMathod is in ancestor class
+                // This part is to handle new-self-dispatch.cl. When dispatching methods with self as return type,
+                // the caller expr type is crucial in determing the actual return type of the method.
+                // the declared return type is ignored. This trick makes self type propagates freely along classes with inheritance
+                AbstractSymbol retType = dispatchMethod.getType();
+                if (TreeConstants.SELF_TYPE.equals(retType) || 
+                    (TreeConstants.SELF_TYPE.equals(dispatchMethod.getHiddenType()) && !TreeConstants.SELF_TYPE.equals(exprType))) {
+                    retType = exprType;
+                }
+                //AbstractSymbol retType = TreeConstants.SELF_TYPE.equals(dispatchMethod.getType()) ? exprType : dispatchMethod.getType();
                 return set_type(retType);
             }
         }

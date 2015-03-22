@@ -191,7 +191,6 @@ class CgenClassTable extends SymbolTable {
             CgenNode pt = (CgenNode) c;
             CgenSupport.emitDispTableRef(pt.getName(), str);
             str.print(CgenSupport.LABEL);
-            // Arrange class inheritance from top to bottom
             Stack<CgenNode> classStack = new Stack<CgenNode>();            
             while (!TreeConstants.No_class.equals(pt.getName())) {
                 classStack.push(pt);
@@ -298,7 +297,6 @@ class CgenClassTable extends SymbolTable {
 
     private void codeClassMethod() {
         List<CgenNode> list = new ArrayList<CgenNode>(nds);
-        list = reverseNds(list);
         for (Object c : list) {
             CgenNode node = (CgenNode) c;
             if (!node.basic()) {
@@ -603,27 +601,41 @@ class CgenClassTable extends SymbolTable {
  
     // find right method bottom to up find index top to bottom. find the index of last occurance
     public int getFeatureOffset(AbstractSymbol featureName, AbstractSymbol className, boolean isMethod) {
-        int methodCount = -1;
+        int featureCount = -1;
         int lastOccurance = -1;
         if (lookup(className) != null) { 
             List<CgenNode> classAncestors = reverseNds(getInheritance(className));
             for (CgenNode node : classAncestors) {
                 Features features = node.getFeatures();
                 if (features != null) {
-                    for (Enumeration e = features.getElements(); e.hasMoreElements();) {
-                        methodCount++;
+                    for (Enumeration e = features.getElements(); e.hasMoreElements();) {                      
                         Feature feature = (Feature) e.nextElement();
-                        if (feature.getName().equals(featureName)) {
-                            if ((feature instanceof method && isMethod) ||
-                                (feature instanceof attr && !isMethod)) {
-                                lastOccurance = methodCount;
-                            }
-                        }
+                        if ((feature instanceof method && isMethod) ||
+                            (feature instanceof attr && !isMethod)) {
+                            featureCount++;     
+                            if (feature.getName().equals(featureName)) {
+                                lastOccurance = featureCount;
+                            }                    
+                        }  
                     }
                 }
             }
         }
         return lastOccurance;
+    }
+
+    public int getAttrNumber(AbstractSymbol className) {
+        int result = 0;
+        if (lookup(className) != null) {
+            CgenNode node = (CgenNode) lookup(className);
+            for (Enumeration e = node.getFeatures().getElements(); e.hasMoreElements();) {
+                Feature feature = (Feature) e.nextElement();
+                if (feature instanceof attr) {
+                    result++;
+                }
+            }
+        }
+        return result;
     }
 
    

@@ -11,6 +11,8 @@
 import java.util.Enumeration;
 import java.io.PrintStream;
 import java.util.Vector;
+import java.util.Map;
+import java.util.HashMap;
 
 
 /** Defines simple phylum Program */
@@ -414,17 +416,37 @@ class method extends Feature {
     }
     
     public void code(CgenNode node, CgenClassTable classTable, PrintStream s) {
+/*
+Main.method:
+        addiu   $sp $sp -12
+        sw      $fp 12($sp)
+        sw      $s0 8($sp)
+        sw      $ra 4($sp)
+        addiu   $fp $sp 4
+        move    $s0 $a0
+        la      $a0 int_const0
+        lw      $fp 12($sp)
+        lw      $s0 8($sp)
+        lw      $ra 4($sp)
+        addiu   $sp $sp 16
+        jr      $ra
+*/
+        // classTable is used for formals
         int tempVarNumber = expr.getTempNumber();
-        //System.out.println(node.getName().toString() + tempVarNumber);
+        int formalCount = formals.getLength();
+        classTable.enterScope();
+        for (Enumeration e = formals.getElements(); e.hasMoreElements();) {
+            formal f = (formal) e.nextElement();
+            classTable.addId(f.name, new Integer(--formalCount));
+        }
+
         CgenSupport.emitMethodRef(node.getName(), name, s);
         s.print(CgenSupport.LABEL);
         CgenSupport.emitEnterFunc(tempVarNumber, s);
-
-        int totalVar = CgenSupport.DEFAULT_OBJFIELDS + tempVarNumber + formals.getLength();
-        
+        //int totalVar = CgenSupport.DEFAULT_OBJFIELDS + tempVarNumber + formals.getLength();       
         expr.code(node, classTable, 0, s);
-        
         CgenSupport.emitExitFunc(tempVarNumber + formals.getLength(), s);
+        classTable.exitScope();
     }
 
     public int getTempNumber() {
@@ -482,14 +504,10 @@ class attr extends Feature {
     }
 
     public void code(CgenNode node, CgenClassTable classTable, PrintStream s) {
-        AbstractSymbol attrType = type_decl;
-        if (TreeConstants.SELF_TYPE.equals(type_decl) || TreeConstants.self.equals(name)) {
-            attrType = node.getName();
-        } 
-        if (init.get_type() != null) {
-            classTable.addId(name, classTable.lookup(type_decl));
+        classTable.addId(name, classTable.lookup(type_decl));
+        if (init.get_type() != null) {          
             init.code(node, classTable, 0, s);
-            int offset = classTable.getFeatureOffset(name, attrType, false);
+            int offset = classTable.getFeatureOffset(name, node.getName(), false) + CgenSupport.DEFAULT_OBJFIELDS;
             CgenSupport.emitStore(CgenSupport.ACC, offset, CgenSupport.SELF, s);
         }
     }
@@ -627,12 +645,14 @@ class assign extends Expression {
       * */
     public void code(CgenNode node, CgenClassTable classTable, int curTemp, PrintStream s) {
         expr.code(node, classTable, curTemp, s);
-        AbstractSymbol typeName = expr.get_type();
-        if (TreeConstants.SELF_TYPE.equals(typeName)) {
-            typeName = node.getName();
+        int offset = 0;
+        if (classTable.probe(name) != null) {
+            offset = ((Integer)classTable.probe(name)).intValue() + CgenSupport.DEFAULT_OBJFIELDS;
+            CgenSupport.emitStore(CgenSupport.ACC, offset, CgenSupport.SELF, s);
+        } else {
+            offset = classTable.getFeatureOffset(name, node.getName(), false) + CgenSupport.DEFAULT_OBJFIELDS;
+            CgenSupport.emitStore(CgenSupport.ACC, offset, CgenSupport.FP, s);
         }
-        int offset = classTable.getFeatureOffset(name, typeName, false);
-        CgenSupport.emitStore(CgenSupport.ACC, offset, CgenSupport.SELF, s);
     }
 
     public int getTempNumber() {
@@ -790,8 +810,18 @@ class dispatch extends Expression {
       * @param s the output stream 
       * */
     public void code(CgenNode node, CgenClassTable classTable, int curTemp, PrintStream s) {
-        AbstractSymbol dispType = expr instanceof no_expr ? node.getName() : expr.get_type();
-        dispType = TreeConstants.SELF_TYPE.equals(dispType) ? node.getName() : dispType;
+        AbstractSymbol retType = get_type();
+System.out.println("retType " + retType + " Class " + node.getName());
+        AbstractSymbol exprType = expr instanceof no_expr ? TreeConstants.SELF_TYPE : expr.get_type();
+
+        if (TreeConstants.SELF_TYPE.equals(retType)) {
+            retType = exprType;
+            if (TreeConstants.SELF_TYPE.equals(exprType)) {
+                retType = node.getName();
+            }
+        }
+        System.out.println("retType " + retType + " Class " + node.getName());
+
         int tempVar = 0;
         for (Enumeration e = actual.getElements(); e.hasMoreElements();) {
             Expression actualExpr = (Expression) e.nextElement();
@@ -801,6 +831,7 @@ class dispatch extends Expression {
             CgenSupport.emitPush(CgenSupport.ACC, s);
         }
         expr.code(node, classTable, curTemp, s);
+
         tempVar = expr.getTempNumber();  
         curTemp = CgenSupport.max(curTemp, tempVar); 
 
@@ -810,9 +841,9 @@ class dispatch extends Expression {
         
         CgenSupport.emitLabelDef(label, s);
         CgenSupport.emitPartialLoadAddress(CgenSupport.T1, s);
-        CgenSupport.emitDispTableRef(dispType, s);
+        CgenSupport.emitDispTableRef(retType, s);
         s.println("");
-        int offset = classTable.getFeatureOffset(name, dispType, true);
+        int offset = classTable.getFeatureOffset(name, retType, true);
         CgenSupport.emitLoad(CgenSupport.T1, offset, CgenSupport.T1, s);
         CgenSupport.emitJalr(CgenSupport.T1, s);
     }
@@ -1026,6 +1057,10 @@ class block extends Expression {
       * @param s the output stream 
       * */
     public void code(CgenNode node, CgenClassTable classTable, int curTemp, PrintStream s) {
+        for (Enumeration e = body.getElements(); e.hasMoreElements();) {
+            Expression expr = (Expression) e.nextElement();
+            expr.code(node, classTable, curTemp, s);
+        }
     }
 
     public int getTempNumber() {
@@ -1415,6 +1450,18 @@ class neg extends Expression {
       * @param s the output stream 
       * */
     public void code(CgenNode node, CgenClassTable classTable, int curTemp, PrintStream s) {
+/*
+        lw      $a0 16($s0)
+        jal     Object.copy
+        lw      $t1 12($a0)
+        neg     $t1 $t1
+        sw      $t1 12($a0)
+*/
+        e1.code(node, classTable, curTemp, s);
+        CgenSupport.emitJal("Object.copy", s);
+        CgenSupport.emitLoad(CgenSupport.T1, CgenSupport.DEFAULT_OBJFIELDS, CgenSupport.getReg(curTemp), s);
+        CgenSupport.emitNeg(CgenSupport.T1, CgenSupport.T1, s);
+        CgenSupport.emitStore(CgenSupport.T1, CgenSupport.DEFAULT_OBJFIELDS, CgenSupport.ACC, s);
     }
 
     public int getTempNumber() {
@@ -1463,6 +1510,26 @@ class lt extends Expression {
       * @param s the output stream 
       * */
     public void code(CgenNode node, CgenClassTable classTable, int curTemp, PrintStream s) {
+    /* 
+        lw      $s1 28($s0)
+        lw      $a0 16($s0)
+        lw      $t1 12($s1)
+        lw      $t2 12($a0)
+        la      $a0 bool_const1
+        blt     $t1 $t2 label0
+        la      $a0 bool_const0
+    label0:
+    */
+        int label = CgenSupport.getLabel();
+        e1.code(node, classTable, curTemp, s);
+        e2.code(node, classTable, curTemp + 1, s);
+        CgenSupport.emitLoad(CgenSupport.T1, CgenSupport.DEFAULT_OBJFIELDS, CgenSupport.ACC, s);
+        CgenSupport.emitLoad(CgenSupport.T2, CgenSupport.DEFAULT_OBJFIELDS, CgenSupport.S1, s);
+        CgenSupport.emitLoadBool(CgenSupport.ACC, new BoolConst(true), s);
+        CgenSupport.emitBlt(CgenSupport.T1, CgenSupport.T2, label, s);
+        CgenSupport.emitLoadBool(CgenSupport.ACC, new BoolConst(false), s);
+        CgenSupport.emitLabelDef(label, s); 
+        
     }
 
     public int getTempNumber() {
@@ -1511,6 +1578,26 @@ class eq extends Expression {
       * @param s the output stream 
       * */
     public void code(CgenNode node, CgenClassTable classTable, int curTemp, PrintStream s) {
+/*
+        lw      $s1 28($s0)
+        lw      $t2 16($s0)
+        move    $t1 $s1
+        la      $a0 bool_const1
+        beq     $t1 $t2 label0
+        la      $a1 bool_const0
+        jal     equality_test
+label0:
+*/   
+        int label = CgenSupport.getLabel();
+        e1.code(node, classTable, curTemp, s);
+        e2.code(node, classTable, curTemp + 1, s);
+        CgenSupport.emitMove(CgenSupport.T1, CgenSupport.ACC, s);
+        CgenSupport.emitLoadBool(CgenSupport.ACC, new BoolConst(false), s);
+        CgenSupport.emitBeq(CgenSupport.T1, CgenSupport.S1, label, s);
+        CgenSupport.emitLoadBool(CgenSupport.ACC, new BoolConst(true), s);
+        CgenSupport.emitJal("equality_test", s);
+
+        CgenSupport.emitLabelDef(label, s);    
     }
 
     public int getTempNumber() {
@@ -1559,10 +1646,28 @@ class leq extends Expression {
       * @param s the output stream 
       * */
     public void code(CgenNode node, CgenClassTable classTable, int curTemp, PrintStream s) {
+       /*                 lw      $s1 28($s0)
+        lw      $a0 16($s0)
+        lw      $t1 12($s1)
+        lw      $t2 12($a0)
+        la      $a0 bool_const1
+        ble     $t1 $t2 label0
+        la      $a0 bool_const0
+label0:
+*/
+        int label = CgenSupport.getLabel();
+        e1.code(node, classTable, curTemp, s);
+        e2.code(node, classTable, curTemp + 1, s);
+        CgenSupport.emitLoad(CgenSupport.T1, CgenSupport.DEFAULT_OBJFIELDS, CgenSupport.S1, s);
+        CgenSupport.emitLoad(CgenSupport.T2, CgenSupport.DEFAULT_OBJFIELDS, CgenSupport.ACC, s);
+	CgenSupport.emitLoadBool(CgenSupport.ACC, new BoolConst(false), s);
+        CgenSupport.emitBleq(CgenSupport.T1, CgenSupport.T2, label, s);
+	CgenSupport.emitLoadBool(CgenSupport.ACC, new BoolConst(true), s);
+        CgenSupport.emitLabelDef(label, s);  
     }
 
     public int getTempNumber() {
-        return e1.getTempNumber() > e2.getTempNumber() + 1 ? e1.getTempNumber() : e2.getTempNumber() + 1;
+        return CgenSupport.max(e1.getTempNumber(), e2.getTempNumber() + 1);
     }
 
 }
@@ -1603,6 +1708,21 @@ class comp extends Expression {
       * @param s the output stream 
       * */
     public void code(CgenNode node, CgenClassTable classTable, int curTemp, PrintStream s) {
+/*
+        lw      $a0 24($s0)
+        lw      $t1 12($a0)
+        la      $a0 bool_const1
+        beqz    $t1 label0
+        la      $a0 bool_const0
+label0:
+*/
+        int label = CgenSupport.getLabel();
+        e1.code(node, classTable, curTemp, s);
+        CgenSupport.emitLoad(CgenSupport.T1, CgenSupport.DEFAULT_OBJFIELDS, CgenSupport.ACC, s);
+	CgenSupport.emitLoadBool(CgenSupport.T1, new BoolConst(false), s);
+        CgenSupport.emitBeqz(CgenSupport.T1, label, s);
+	CgenSupport.emitLoadBool(CgenSupport.T1, new BoolConst(true), s);
+        CgenSupport.emitLabelDef(label, s);
     }
 
     public int getTempNumber() {
@@ -1788,19 +1908,23 @@ class new_ extends Expression {
         jal     Object.copy
         jal     IO_init
         */
+         AbstractSymbol curType = get_type();
+         if (TreeConstants.SELF_TYPE.equals(curType)) {
+             curType = node.getName();
+         }
          CgenSupport.emitPartialLoadAddress(CgenSupport.ACC, s);
-         CgenSupport.emitProtObjRef(type_name, s);
+         CgenSupport.emitProtObjRef(curType, s);
          s.println("");
          s.print(CgenSupport.JAL);
          CgenSupport.emitMethodRef(TreeConstants.Object_, TreeConstants.copy, s);
          s.println("");
          s.print(CgenSupport.JAL);
-         CgenSupport.emitInitRef(type_name, s);
+         CgenSupport.emitInitRef(curType, s);
          s.println("");
     }
 
     public int getTempNumber() {
-        return 1;
+        return 0;
     }
 }
 
@@ -1840,6 +1964,20 @@ class isvoid extends Expression {
       * @param s the output stream 
       * */
     public void code(CgenNode node, CgenClassTable classTable, int curTemp, PrintStream s) {
+        e1.code(node, classTable, curTemp, s);
+        /*        lw      $a0 16($s0)
+        move    $t1 $a0
+        la      $a0 bool_const1
+        beqz    $t1 label0
+        la      $a0 bool_const0
+label0:
+*/
+        int label = CgenSupport.getLabel();
+        CgenSupport.emitMove(CgenSupport.T1, CgenSupport.ACC, s);
+        CgenSupport.emitLoadBool(CgenSupport.ACC, new BoolConst(false), s);
+        CgenSupport.emitBeqz(CgenSupport.T1, label, s);
+        CgenSupport.emitLoadBool(CgenSupport.ACC, new BoolConst(true), s);
+        CgenSupport.emitLabelDef(label, s);  
     }
 
     public int getTempNumber() {
@@ -1878,6 +2016,7 @@ class no_expr extends Expression {
       * @param s the output stream 
       * */
     public void code(CgenNode node, CgenClassTable classTable, int curTemp, PrintStream s) {
+        return;
     }
 
     public int getTempNumber() {
@@ -1920,13 +2059,25 @@ class object extends Expression {
       * @param s the output stream 
       * */
     public void code(CgenNode node, CgenClassTable classTable, int curTemp, PrintStream s) {
-        String reg = curTemp > 0 ? CgenSupport.ACC : CgenSupport.SELF;
+        String reg = CgenSupport.getReg(curTemp);
         AbstractSymbol typeName = get_type();
+
         if (TreeConstants.SELF_TYPE.equals(typeName)) {
             return;
         }
-        int offset = classTable.getFeatureOffset(name, typeName, false);
-        CgenSupport.emitLoad(CgenSupport.ACC, offset, reg, s);
+        int offset = 0;
+        // if formals calculate offset in fp otherwise calculate in s0
+        if (classTable.probe(name) instanceof Integer) {
+            offset = ((Integer)classTable.probe(name)).intValue();
+            CgenSupport.emitLoad(reg, offset + CgenSupport.DEFAULT_OBJFIELDS, CgenSupport.FP, s);
+        } else {
+            offset = classTable.getFeatureOffset(name, node.getName(), false);
+            if (offset < 0) {
+                CgenSupport.emitLoad(reg, curTemp + classTable.getAttrNumber(node.getName()), CgenSupport.SELF, s);
+            } else {
+                CgenSupport.emitLoad(reg, offset + CgenSupport.DEFAULT_OBJFIELDS, CgenSupport.SELF, s);
+            }
+        }
     }
 
     public int getTempNumber() {
