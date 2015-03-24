@@ -386,7 +386,7 @@ class method extends Feature {
     protected AbstractSymbol return_type;
     protected Expression expr;
 
-    protected AbstractSymbol hiddenType;
+//    protected AbstractSymbol hiddenType;
     /** Creates "method" AST node. 
       *
       * @param lineNumber the line in the source file from which this node came.
@@ -401,7 +401,7 @@ class method extends Feature {
         formals = a2;
         return_type = a3;
         expr = a4;
-        hiddenType = return_type;
+        //hiddenType = return_type;
     }
     public TreeNode copy() {
         return new method(lineNumber, copy_AbstractSymbol(name), (Formals)formals.copy(), copy_AbstractSymbol(return_type), (Expression)expr.copy());
@@ -440,9 +440,9 @@ class method extends Feature {
         return formals;
     }
 
-    public AbstractSymbol getHiddenType() {
-        return hiddenType;
-    }
+//    public AbstractSymbol getHiddenType() {
+//        return hiddenType;
+//    }
 
     @Override
     public void semant(ClassTable classTable, SymbolTable symbolTable, class_c curClass, boolean firstScan) {
@@ -496,9 +496,9 @@ class method extends Feature {
         // case 3: ID:SELF {XXX} this is wrong
         ///            A     B   
         //         A  return_type   B  exprType
-        if (TreeConstants.SELF_TYPE.equals(exprType)) {
-            hiddenType = TreeConstants.SELF_TYPE;
-        }
+//        if (TreeConstants.SELF_TYPE.equals(exprType)) {
+//            hiddenType = TreeConstants.SELF_TYPE;
+//        }
 
         if (!TreeConstants.SELF_TYPE.equals(return_type)) {
             exprType = TreeConstants.SELF_TYPE.equals(exprType) ? curClass.getName() : exprType;
@@ -898,8 +898,8 @@ class static_dispatch extends Expression {
                     }
                 }
                 AbstractSymbol retType = dispatchMethod.getType();
-                if (TreeConstants.SELF_TYPE.equals(retType) ||
-                    (TreeConstants.SELF_TYPE.equals(dispatchMethod.getHiddenType()) && !TreeConstants.SELF_TYPE.equals(exprType))) {
+                if (TreeConstants.SELF_TYPE.equals(retType)) { // ||
+             //       (TreeConstants.SELF_TYPE.equals(dispatchMethod.getHiddenType()) && !TreeConstants.SELF_TYPE.equals(exprType))) {
                     retType = type_name;
                 }
                 return set_type(retType);
@@ -999,8 +999,8 @@ class dispatch extends Expression {
                 // the caller expr type is crucial in determing the actual return type of the method.
                 // the declared return type is ignored. This trick makes self type propagates freely along classes with inheritance
                 AbstractSymbol retType = dispatchMethod.getType();
-                if (TreeConstants.SELF_TYPE.equals(retType) || 
-                    (TreeConstants.SELF_TYPE.equals(dispatchMethod.getHiddenType()) && !TreeConstants.SELF_TYPE.equals(exprType))) {
+                if (TreeConstants.SELF_TYPE.equals(retType)) { // || 
+                 //   (TreeConstants.SELF_TYPE.equals(dispatchMethod.getHiddenType()) && !TreeConstants.SELF_TYPE.equals(exprType))) {
                     retType = exprType;
                 }
                 //AbstractSymbol retType = TreeConstants.SELF_TYPE.equals(dispatchMethod.getType()) ? exprType : dispatchMethod.getType();

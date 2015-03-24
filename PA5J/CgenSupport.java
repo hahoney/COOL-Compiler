@@ -59,6 +59,9 @@ class CgenSupport {
     final static String STRCONST_PREFIX     = "str_const";
     final static String BOOLCONST_PREFIX    = "bool_const";
 
+    final static String CLASSOBJECTTABLE = "class_objTab";
+    final static String OBJECTCOPY = "Object.copy";
+
 
     final static int    EMPTYSLOT           = 0;
     final static String LABEL               = ":\n";
@@ -121,8 +124,24 @@ class CgenSupport {
 
 // user variables
     public static int label = 0;
+    public static int classTagNumber = 0;
+    public static boolean usedS1 = true;
+    public static boolean usedAcc = false;
     static int getLabel() { label++; return label - 1; }
-
+    static int getTagNumber() { classTagNumber++; return classTagNumber - 1; }
+    static String getReg() {
+        if (usedAcc && usedS1) { return "ERROR"; }
+        if (!usedS1) { usedS1 = true; return S1; }
+        usedAcc = true;
+        return ACC;
+    }
+    static void openS1Reg() {
+        usedS1 = false;
+    }
+    static void resetReg() {
+        usedS1 = true;
+        usedAcc = false;
+    }
     /** Emits an LW instruction.
      * @param dest_reg the destination register
      * @param offset the word offset from source register
@@ -616,11 +635,11 @@ class CgenSupport {
         addiu   $sp $sp 12
         jr      $ra
 */
-    public static void emitExitFunc(int size, PrintStream s) {
-        emitLoad(FP, 3, SP, s);
-        emitLoad(SELF, 2, SP, s);
-        emitLoad(RA, 1, SP, s);
-        emitAddiu(SP, SP, (3 + size) * WORD_SIZE, s);
+    public static void emitExitFunc(int size, int formalNumber, PrintStream s) {
+        emitLoad(FP, 3 + size, SP, s);
+        emitLoad(SELF, 2 + size, SP, s);
+        emitLoad(RA, 1 + size, SP, s);
+        emitAddiu(SP, SP, (3 + size + formalNumber) * WORD_SIZE, s);
         emitReturn(s);
     }
 /*
@@ -645,10 +664,6 @@ class CgenSupport {
 
     public static void printClassOffset(AbstractSymbol className, AbstractSymbol featureName, int offset) {
         System.out.println("Class: " + className + " Feature Name: " + featureName + " offset: " + offset);
-    }
-
-    public static String getReg(int regInt) {
-        return regInt > 0 ? S1 : ACC;
     }
     
 }

@@ -25,9 +25,8 @@ import java.io.PrintStream;
 import java.util.Vector;
 import java.util.Enumeration;
 
-import java.util.Stack;
-import java.util.List;
-import java.util.ArrayList;
+import java.util.*;
+
 
 /** This class is used for representing the inheritance tree during code
     generation. You will need to fill in some of its methods and
@@ -158,7 +157,7 @@ class CgenClassTable extends SymbolTable {
     private void codeClassTable() {
         codeClassNameTable();
         codeClassObjectTable();
-        codeClassDispatchTable();
+        codeClassDispatchTables();
         codeClassObjectProt();
     }
 
@@ -186,33 +185,61 @@ class CgenClassTable extends SymbolTable {
         }
     }
 
-    private void codeClassDispatchTable() {
+    private void codeClassDispatchTables() { 
         for (Object c : nds) {
-            CgenNode pt = (CgenNode) c;
-            CgenSupport.emitDispTableRef(pt.getName(), str);
-            str.print(CgenSupport.LABEL);
-            Stack<CgenNode> classStack = new Stack<CgenNode>();            
-            while (!TreeConstants.No_class.equals(pt.getName())) {
-                classStack.push(pt);
-                pt = pt.getParentNd();
-            }
-            while (!classStack.isEmpty()) {
-                pt = classStack.pop();
-                for (Enumeration e = pt.getFeatures().getElements(); e.hasMoreElements();) {
-                    Feature feature = (Feature) e.nextElement();
-                    if (feature instanceof method) {
-                        str.print(CgenSupport.WORD);
-                        CgenSupport.emitMethodRef(pt.getName(), ((method)feature).getName(), str);
-                        str.println("");
-                    }
-                }
-            }      
+            CgenNode node = (CgenNode) c;
+            codeClassDispatchTable(node);
         }
     }
 
+    // Very dirty implementation, will improve later
+    // class A has f
+    // class B inh A has B.g (A.f)
+    // class C inh B has C.w, C.g, A.f
+    private void codeClassDispatchTable(CgenNode c) {
+        Map<AbstractSymbol, AbstractSymbol> methodMap = new HashMap<AbstractSymbol, AbstractSymbol>();
+        List<CgenNode> classList = new ArrayList<CgenNode>();
+ 
+        CgenNode pt = c;
+        CgenSupport.emitDispTableRef(pt.getName(), str);
+        str.print(CgenSupport.LABEL);
+        Stack<CgenNode> classStack = new Stack<CgenNode>();            
+        while (!TreeConstants.No_class.equals(pt.getName())) {
+            classStack.push(pt);
+            pt = pt.getParentNd();
+        }
+        // top down if feature already in map (upper class has it), overwrite it.
+        // if A <= B (map.get(method) = A)
+        // map.get(method) for B is B. If A > B, map.get(method) for B is A 
+        while (!classStack.isEmpty()) {
+            pt = classStack.pop(); 
+            classList.add(pt);       
+            for (Enumeration e = pt.getFeatures().getElements(); e.hasMoreElements();) {
+                Feature feature = (Feature) e.nextElement();
+                if (feature instanceof method) {
+                    methodMap.put(feature.getName(), pt.getName());
+                }
+            }   
+        }
+        for (CgenNode node : classList) {
+            for (Enumeration e = node.getFeatures().getElements(); e.hasMoreElements();) {
+                Feature feature = (Feature) e.nextElement();
+                if (feature instanceof method && methodMap.containsKey(feature.getName())) {
+                    AbstractSymbol lastOverrideClassName = methodMap.get(feature.getName());  
+                    AbstractSymbol className = isSubtype(node.getName(), lastOverrideClassName) ? node.getName() : lastOverrideClassName;
+                    str.print(CgenSupport.WORD);
+                    CgenSupport.emitMethodRef(className, feature.getName(), str);
+                    methodMap.remove(feature.getName());
+                    str.println("");
+                }
+            } 
+        }  
+ 
+    }
+
     private void codeClassObjectProt() {
-        int classTagNumber = 0;
         for (Object c : nds) {
+            int classTagNumber = CgenSupport.getTagNumber();
             CgenNode pt = (CgenNode) c;
             // Eye catcher
             str.println(CgenSupport.WORD + "-1");
@@ -265,13 +292,6 @@ class CgenClassTable extends SymbolTable {
         for (Object c : nds) {
             int attrInitNumber = 0;
             CgenNode node = (CgenNode) c;
-            /*for (Enumeration e = node.getFeatures().getElements(); e.hasMoreElements();) {
-                Feature feature = (Feature) e.nextElement();
-                if (feature instanceof attr) {
-                    int tempNumber = ((attr) feature).getTempNumber();
-                    attrInitNumber = CgenSupport.max(attrInitNumber, tempNumber);
-                }
-            }*/
             CgenSupport.emitInitRef(node.getName(), str);
             str.print(CgenSupport.LABEL);
             CgenSupport.emitEnterFunc(0, str);
@@ -291,7 +311,7 @@ class CgenClassTable extends SymbolTable {
             }
 
             CgenSupport.emitMove(CgenSupport.ACC, CgenSupport.SELF, str);
-            CgenSupport.emitExitFunc(0, str);
+            CgenSupport.emitExitFunc(0, 0, str);
         }
     }
 
@@ -603,6 +623,7 @@ class CgenClassTable extends SymbolTable {
     public int getFeatureOffset(AbstractSymbol featureName, AbstractSymbol className, boolean isMethod) {
         int featureCount = -1;
         int lastOccurance = -1;
+        Set<AbstractSymbol> methodSet = new HashSet<AbstractSymbol>();
         if (lookup(className) != null) { 
             List<CgenNode> classAncestors = reverseNds(getInheritance(className));
             for (CgenNode node : classAncestors) {
@@ -610,8 +631,9 @@ class CgenClassTable extends SymbolTable {
                 if (features != null) {
                     for (Enumeration e = features.getElements(); e.hasMoreElements();) {                      
                         Feature feature = (Feature) e.nextElement();
-                        if ((feature instanceof method && isMethod) ||
+                        if ((feature instanceof method && isMethod && !methodSet.contains(feature.getName())) ||
                             (feature instanceof attr && !isMethod)) {
+                            if (isMethod) { methodSet.add(feature.getName()); }
                             featureCount++;     
                             if (feature.getName().equals(featureName)) {
                                 lastOccurance = featureCount;
@@ -662,6 +684,22 @@ class CgenClassTable extends SymbolTable {
         }
         return result;      
     }
+
+    public boolean isSubtype(AbstractSymbol sub, AbstractSymbol ancestor) {
+        if (TreeConstants.SELF_TYPE.equals(sub) || TreeConstants.SELF_TYPE.equals(ancestor)) {
+            return sub.equals(ancestor);
+        }
+
+        if (ancestor.equals(sub)) { return true; }
+        if (ancestor.equals(TreeConstants.Object_)) { return true; }
+
+        while (!sub.equals(TreeConstants.Object_)) {
+            if (sub.equals(ancestor)) { return true; }
+            else { sub = ((CgenNode)lookup(sub)).getParentNd().getName(); }
+        }
+        return false;
+    }
+
     
 }
 			  
