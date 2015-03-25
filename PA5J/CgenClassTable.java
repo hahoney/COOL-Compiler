@@ -249,11 +249,17 @@ class CgenClassTable extends SymbolTable {
             // class tag
             str.println(CgenSupport.WORD + classTagNumber);
             int attrNumber = 0;
-            for (Enumeration e = pt.getFeatures().getElements(); e.hasMoreElements();) {
-                Feature feature = (Feature) e.nextElement();
-                if (feature instanceof attr) {
-                    attrNumber++;
+            CgenNode inheritPt = pt;
+            List<AbstractSymbol> attrList = new ArrayList<AbstractSymbol>();
+            while (!TreeConstants.Object_.equals(inheritPt.getName())) {
+                for (Enumeration e = inheritPt.getFeatures().getElements(); e.hasMoreElements();) {
+                    Feature feature = (Feature) e.nextElement();
+                    if (feature instanceof attr) {
+                        attrNumber++;
+                        attrList.add(feature.getType());
+                    }
                 }
+                inheritPt = inheritPt.getParentNd();
             }
             str.print(CgenSupport.WORD);
             str.println(CgenSupport.DEFAULT_OBJFIELDS + attrNumber);
@@ -265,25 +271,20 @@ class CgenClassTable extends SymbolTable {
 
             // attr list
             int attrOffset = CgenSupport.DEFAULT_OBJFIELDS;
-            for (Enumeration e = pt.getFeatures().getElements(); e.hasMoreElements();) {
-                Feature feature = (Feature) e.nextElement();
-                if (feature instanceof attr) {
-                    attrOffset++;
-                    str.print(CgenSupport.WORD);
-                    AbstractSymbol sym = feature.getType();
-                    if (TreeConstants.Str.equals(sym)) {
-                        StringSymbol strSymbol = (StringSymbol) AbstractTable.stringtable.lookup("");
-                        strSymbol.codeRef(str);
-                    } else if (TreeConstants.Int.equals(sym)) {
-                        IntSymbol intSymbol = (IntSymbol) AbstractTable.inttable.lookup("0");
-                        intSymbol.codeRef(str);
-                    } else if (TreeConstants.Bool.equals(sym)){
-                        new BoolConst(false).codeRef(str);
-                    } else {
-                        str.print(0);
-                    }
-                    str.println("");
+            for (AbstractSymbol attr : attrList) {
+                str.print(CgenSupport.WORD);
+                if (TreeConstants.Str.equals(attr)) {
+                    StringSymbol strSymbol = (StringSymbol) AbstractTable.stringtable.lookup("");
+                    strSymbol.codeRef(str);
+                } else if (TreeConstants.Int.equals(attr)) {
+                    IntSymbol intSymbol = (IntSymbol) AbstractTable.inttable.lookup("0");
+                    intSymbol.codeRef(str);
+                } else if (TreeConstants.Bool.equals(attr)){
+                    new BoolConst(false).codeRef(str);
+                } else {
+                    str.print(0);
                 }
+                str.println("");
             }
         }
     }
@@ -295,7 +296,6 @@ class CgenClassTable extends SymbolTable {
             CgenSupport.emitInitRef(node.getName(), str);
             str.print(CgenSupport.LABEL);
             CgenSupport.emitEnterFunc(0, str);
-
             if (!TreeConstants.Object_.equals(node.getName())) {
                 str.print(CgenSupport.JAL);
                 CgenSupport.emitInitRef(node.getParentNd().getName(), str);

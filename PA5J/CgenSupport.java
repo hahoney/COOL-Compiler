@@ -129,19 +129,16 @@ class CgenSupport {
     public static boolean usedAcc = false;
     static int getLabel() { label++; return label - 1; }
     static int getTagNumber() { classTagNumber++; return classTagNumber - 1; }
-    static String getReg() {
-        if (usedAcc && usedS1) { return "ERROR"; }
-        if (!usedS1) { usedS1 = true; return S1; }
-        usedAcc = true;
-        return ACC;
+
+    public static int curMethodTempVarNumber = 0;
+    public static int getCurrentMethodTempVarNumber() {
+        return curMethodTempVarNumber;
     }
-    static void openS1Reg() {
-        usedS1 = false;
+    public static void setCurrentMethodTempVarNumber(int number) {
+        curMethodTempVarNumber = number;
     }
-    static void resetReg() {
-        usedS1 = true;
-        usedAcc = false;
-    }
+
+
     /** Emits an LW instruction.
      * @param dest_reg the destination register
      * @param offset the word offset from source register
