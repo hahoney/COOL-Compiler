@@ -1168,6 +1168,19 @@ class let extends Expression {
       * @param s the output stream 
       * */
     public void code(CgenNode node, CgenClassTable classTable, int curTemp, PrintStream s) {
+        classTable.enterScope();
+        init.code(node, classTable, curTemp, s);
+        curTemp--;
+        classTable.addId(identifier, new Integer(curTemp));
+        int curMethodTempVarNumber = CgenSupport.getCurrentMethodTempVarNumber();
+        CgenSupport.emitStore(CgenSupport.ACC, curMethodTempVarNumber - curTemp - 1, CgenSupport.FP, s);
+
+        // I don't know how many regs are allowed for the compiler. Here we assume the 
+        // minimum and will optimize regs later. We will do
+        // la $a0  $some_const
+        // sw $a0 4($fp)
+        body.code(node, classTable, curTemp, s);
+        classTable.exitScope();
     }
 
     public int getTempNumber() {
@@ -2129,6 +2142,7 @@ class object extends Expression {
         int offset = 0;
         // if formals calculate offset in fp otherwise calculate in s0
         if (classTable.probe(name) instanceof Integer) {
+System.out.println("Load");
             offset = ((Integer)classTable.probe(name)).intValue();
             CgenSupport.emitLoad(reg, offset + CgenSupport.getCurrentMethodTempVarNumber() + CgenSupport.DEFAULT_OBJFIELDS, CgenSupport.FP, s);
         } else {

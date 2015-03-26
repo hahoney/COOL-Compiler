@@ -179,7 +179,7 @@ class CgenSupport {
      * @param address the address from which a word is loaded
      * @param s the output stream
      * */
-    static void emitLoadAddress(String dest_reg, String address,PrintStream s){
+    static void emitLoadAddress(String dest_reg, String address, PrintStream s){
 	s.println(LA + dest_reg + " " + address);
     }
 
