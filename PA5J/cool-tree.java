@@ -77,6 +77,7 @@ abstract class Feature extends TreeNode {
     public abstract AbstractSymbol getName();
     public abstract AbstractSymbol getType();
     public abstract void code(CgenNode node, CgenClassTable classTable, PrintStream s);
+    public abstract int getTempNumber(); 
 }
 
 
@@ -434,17 +435,17 @@ Main.method:
         // classTable is used for formals
         int tempVarNumber = expr.getTempNumber();
         int formalCount = formals.getLength();
-        CgenSupport.setCurrentMethodTempVarNumber(tempVarNumber);
+        //CgenSupport.setCurrentMethodTempVarNumber(tempVarNumber);
         classTable.enterScope();
         for (Enumeration e = formals.getElements(); e.hasMoreElements();) {
             formal f = (formal) e.nextElement();
-            classTable.addId(f.name, new Integer(--formalCount));
+            classTable.addId(f.name, new Integer(--formalCount + tempVarNumber + CgenSupport.DEFAULT_OBJFIELDS));
         }
 
         CgenSupport.emitMethodRef(node.getName(), name, s);
         s.print(CgenSupport.LABEL);
         CgenSupport.emitEnterFunc(tempVarNumber, s);       
-        expr.code(node, classTable, getTempNumber(), s);
+        expr.code(node, classTable, 0, s);
         CgenSupport.emitExitFunc(tempVarNumber, formals.getLength(), s);
         classTable.exitScope();
     }
@@ -644,11 +645,25 @@ class assign extends Expression {
       * @param s the output stream 
       * */
     public void code(CgenNode node, CgenClassTable classTable, int curTemp, PrintStream s) {
-        classTable.addId(name, classTable.lookup(expr.get_type()));
+        //classTable.addId(name, classTable.lookup(expr.get_type()));
+        int curTempVarNumber = CgenSupport.getCurrentMethodTempVarNumber();
+        int stackSize = CgenSupport.DEFAULT_OBJFIELDS + curTempVarNumber;
         expr.code(node, classTable, curTemp, s);
         // variable could be: attr, formal, or local var
         int offset = 0;
-        if (classTable.probe(name) != null) {
+        if (classTable.lookup(name) instanceof Integer) {
+            offset = ((Integer) classTable.lookup(name)).intValue();
+            // store AR
+            if (offset >= stackSize) {
+                CgenSupport.emitStore(CgenSupport.ACC, offset, CgenSupport.FP, s);
+            }
+        } else {
+            offset = classTable.getFeatureOffset(name, node.getName(), false) + curTempVarNumber + CgenSupport.DEFAULT_OBJFIELDS;
+            CgenSupport.emitStore(CgenSupport.ACC, offset, CgenSupport.SELF, s);
+        }
+
+
+ /*       if (classTable.probe(name) != null) {
             //offset = ((Integer)classTable.probe(name)).intValue() + CgenSupport.DEFAULT_OBJFIELDS;
             offset = classTable.getFeatureOffset(name, node.getName(), false);
             if (offset >= 0) {
@@ -659,7 +674,7 @@ class assign extends Expression {
         } else {
             offset = classTable.getFeatureOffset(name, node.getName(), false) + curTemp + CgenSupport.DEFAULT_OBJFIELDS;
             CgenSupport.emitStore(CgenSupport.ACC, offset, CgenSupport.FP, s);
-        }
+        } */
     }
 
     public int getTempNumber() {
@@ -1169,11 +1184,16 @@ class let extends Expression {
       * */
     public void code(CgenNode node, CgenClassTable classTable, int curTemp, PrintStream s) {
         classTable.enterScope();
-        init.code(node, classTable, curTemp, s);
-        curTemp--;
+        if (init instanceof no_expr) {
+            CgenSupport.initVar(type_decl, s); 
+        } else {
+            init.code(node, classTable, curTemp, s);
+        }
+        //int curMethodTempVarNumber = CgenSupport.getCurrentMethodTempVarNumber();
+        //System.out.println(curMethodTempVarNumber - curTemp);
         classTable.addId(identifier, new Integer(curTemp));
-        int curMethodTempVarNumber = CgenSupport.getCurrentMethodTempVarNumber();
-        CgenSupport.emitStore(CgenSupport.ACC, curMethodTempVarNumber - curTemp - 1, CgenSupport.FP, s);
+        CgenSupport.emitStore(CgenSupport.ACC, curTemp, CgenSupport.FP, s);
+        curTemp++;
 
         // I don't know how many regs are allowed for the compiler. Here we assume the 
         // minimum and will optimize regs later. We will do
@@ -1320,6 +1340,7 @@ class sub extends Expression {
             CgenSupport.emitLoadInt(CgenSupport.S1, (IntSymbol)((int_const) e1).token, s);
         } else {
             e1.code(node, classTable, curTemp, s);
+            CgenSupport.emitMove(CgenSupport.S1, CgenSupport.ACC, s);
             curTemp++;
         }
         if (e2 instanceof int_const) {
@@ -1384,6 +1405,7 @@ class mul extends Expression {
             CgenSupport.emitLoadInt(CgenSupport.S1, (IntSymbol)((int_const) e1).token, s);
         } else {
             e1.code(node, classTable, curTemp, s);
+            CgenSupport.emitMove(CgenSupport.S1, CgenSupport.ACC, s);
             curTemp++;
         }
         if (e2 instanceof int_const) {
@@ -1449,6 +1471,7 @@ class divide extends Expression {
             CgenSupport.emitLoadInt(CgenSupport.S1, (IntSymbol)((int_const) e1).token, s);
         } else {
             e1.code(node, classTable, curTemp, s);
+            CgenSupport.emitMove(CgenSupport.S1, CgenSupport.ACC, s);
             curTemp++;
         }
         if (e2 instanceof int_const) {
@@ -1646,11 +1669,13 @@ label0:
 */   
         int label = CgenSupport.getLabel();
         e1.code(node, classTable, curTemp, s);
+        CgenSupport.emitMove(CgenSupport.S1, CgenSupport.ACC, s);
         e2.code(node, classTable, curTemp + 1, s);
-        CgenSupport.emitMove(CgenSupport.T1, CgenSupport.ACC, s);
+        CgenSupport.emitMove(CgenSupport.T2, CgenSupport.ACC, s);
+        CgenSupport.emitMove(CgenSupport.T1, CgenSupport.S1, s);
         CgenSupport.emitLoadBool(CgenSupport.ACC, new BoolConst(false), s);
-        CgenSupport.emitBeq(CgenSupport.T1, CgenSupport.S1, label, s);
-        CgenSupport.emitLoadBool(CgenSupport.ACC, new BoolConst(true), s);
+        CgenSupport.emitBeq(CgenSupport.T1, CgenSupport.T2, label, s);
+        CgenSupport.emitLoadBool(CgenSupport.A1, new BoolConst(true), s);
         CgenSupport.emitJal("equality_test", s);
 
         CgenSupport.emitLabelDef(label, s);    
@@ -1713,6 +1738,7 @@ label0:
 */
         int label = CgenSupport.getLabel();
         e1.code(node, classTable, curTemp, s);
+        CgenSupport.emitMove(CgenSupport.S1, CgenSupport.ACC, s);
         e2.code(node, classTable, curTemp + 1, s);
         CgenSupport.emitLoad(CgenSupport.T1, CgenSupport.DEFAULT_OBJFIELDS, CgenSupport.S1, s);
         CgenSupport.emitLoad(CgenSupport.T2, CgenSupport.DEFAULT_OBJFIELDS, CgenSupport.ACC, s);
@@ -2141,10 +2167,10 @@ class object extends Expression {
         }
         int offset = 0;
         // if formals calculate offset in fp otherwise calculate in s0
-        if (classTable.probe(name) instanceof Integer) {
-System.out.println("Load");
-            offset = ((Integer)classTable.probe(name)).intValue();
-            CgenSupport.emitLoad(reg, offset + CgenSupport.getCurrentMethodTempVarNumber() + CgenSupport.DEFAULT_OBJFIELDS, CgenSupport.FP, s);
+        if (classTable.lookup(name) instanceof Integer) {
+            offset = ((Integer)classTable.lookup(name)).intValue();
+//System.out.println("Load"+name + " " + offset);
+            CgenSupport.emitLoad(reg, offset, CgenSupport.FP, s);
         } else {
             offset = classTable.getFeatureOffset(name, node.getName(), false);
             if (offset < 0) {

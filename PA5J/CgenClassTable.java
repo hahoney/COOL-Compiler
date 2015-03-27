@@ -291,11 +291,15 @@ class CgenClassTable extends SymbolTable {
 
     private void codeClassObjectInit() {
         for (Object c : nds) {
-            int attrInitNumber = 0;
             CgenNode node = (CgenNode) c;
+            int tempVarNumber = 0;
+            for (Enumeration e = node.getFeatures().getElements(); e.hasMoreElements();) {
+                tempVarNumber = CgenSupport.max(tempVarNumber, ((Feature) e.nextElement()).getTempNumber());
+            }
+
             CgenSupport.emitInitRef(node.getName(), str);
             str.print(CgenSupport.LABEL);
-            CgenSupport.emitEnterFunc(0, str);
+            CgenSupport.emitEnterFunc(tempVarNumber, str);
             if (!TreeConstants.Object_.equals(node.getName())) {
                 str.print(CgenSupport.JAL);
                 CgenSupport.emitInitRef(node.getParentNd().getName(), str);
@@ -311,7 +315,7 @@ class CgenClassTable extends SymbolTable {
             }
 
             CgenSupport.emitMove(CgenSupport.ACC, CgenSupport.SELF, str);
-            CgenSupport.emitExitFunc(0, 0, str);
+            CgenSupport.emitExitFunc(tempVarNumber, 0, str);
         }
     }
 

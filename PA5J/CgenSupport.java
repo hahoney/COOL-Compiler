@@ -662,6 +662,22 @@ class CgenSupport {
     public static void printClassOffset(AbstractSymbol className, AbstractSymbol featureName, int offset) {
         System.out.println("Class: " + className + " Feature Name: " + featureName + " offset: " + offset);
     }
+
+    public static void initVar(AbstractSymbol type_decl, PrintStream s) {
+        int emptyStr = AbstractTable.stringtable.lookupIndex("");
+        int emptyInt = AbstractTable.inttable.lookupIndex("0");
+        
+        if (TreeConstants.Bool.equals(type_decl)) {
+            emitLoadAddress(ACC, BOOLCONST_PREFIX + EMPTYSLOT, s);
+        } else if (TreeConstants.Int.equals(type_decl)) {
+            emitLoadAddress(ACC, INTCONST_PREFIX + emptyInt, s);
+        } else if (TreeConstants.Str.equals(type_decl)) {
+            emitLoadAddress(ACC, STRCONST_PREFIX + emptyStr, s);
+        } else {
+            emitMove(ACC, ZERO, s);
+        }
+        //emitStore(ACC, offset, FP, s);
+    }
     
 }
     
