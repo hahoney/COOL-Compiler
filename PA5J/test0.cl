@@ -7,7 +7,7 @@ class B inherits A {};
 
 class Main {
   x:Int<-3;
-  func():Int { x+x };
+  func(x:Int):Int { x+x };
   main():String { "asd" };
 };
 

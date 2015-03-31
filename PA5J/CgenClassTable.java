@@ -299,7 +299,7 @@ class CgenClassTable extends SymbolTable {
 
             CgenSupport.emitInitRef(node.getName(), str);
             str.print(CgenSupport.LABEL);
-            CgenSupport.emitEnterFunc(tempVarNumber, str);
+            CgenSupport.emitEnterFunc(0, str);
             if (!TreeConstants.Object_.equals(node.getName())) {
                 str.print(CgenSupport.JAL);
                 CgenSupport.emitInitRef(node.getParentNd().getName(), str);
@@ -315,7 +315,7 @@ class CgenClassTable extends SymbolTable {
             }
 
             CgenSupport.emitMove(CgenSupport.ACC, CgenSupport.SELF, str);
-            CgenSupport.emitExitFunc(tempVarNumber, 0, str);
+            CgenSupport.emitExitFunc(0, 0, str);
         }
     }
 

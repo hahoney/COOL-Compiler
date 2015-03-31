@@ -632,11 +632,11 @@ class CgenSupport {
         addiu   $sp $sp 12
         jr      $ra
 */
-    public static void emitExitFunc(int size, int formalNumber, PrintStream s) {
-        emitLoad(FP, 3 + size, SP, s);
-        emitLoad(SELF, 2 + size, SP, s);
-        emitLoad(RA, 1 + size, SP, s);
-        emitAddiu(SP, SP, (3 + size + formalNumber) * WORD_SIZE, s);
+    public static void emitExitFunc(int size, int tempVarNumber, PrintStream s) {
+        emitLoad(FP, 3 + tempVarNumber , SP, s);
+        emitLoad(SELF, 2 + tempVarNumber, SP, s);
+        emitLoad(RA, 1 + tempVarNumber, SP, s);
+        emitAddiu(SP, SP, (3 + size + tempVarNumber) * WORD_SIZE, s);
         emitReturn(s);
     }
 /*

@@ -434,19 +434,22 @@ Main.method:
 */
         // classTable is used for formals
         int tempVarNumber = expr.getTempNumber();
-        int formalCount = formals.getLength();
-        //CgenSupport.setCurrentMethodTempVarNumber(tempVarNumber);
+        int formalNumber = formals.getLength();
+        int stackSize = CgenSupport.DEFAULT_OBJFIELDS + tempVarNumber;
         classTable.enterScope();
-        for (Enumeration e = formals.getElements(); e.hasMoreElements();) {
-            formal f = (formal) e.nextElement();
-            classTable.addId(f.name, new Integer(--formalCount + tempVarNumber + CgenSupport.DEFAULT_OBJFIELDS));
-        }
-
         CgenSupport.emitMethodRef(node.getName(), name, s);
         s.print(CgenSupport.LABEL);
-        CgenSupport.emitEnterFunc(tempVarNumber, s);       
+        CgenSupport.emitEnterFunc(tempVarNumber, s); 
+        int formalCount = 0;
+        for (Enumeration e = formals.getElements(); e.hasMoreElements();) {
+            formal f = (formal) e.nextElement();
+            classTable.addId(f.name, new Integer(formalCount + stackSize));
+            //CgenSupport.emitLoad(CgenSupport.ACC, formalCount + stackSize, CgenSupport.FP, s);
+            //CgenSupport.emitStore(CgenSupport.ACC, formalCount, CgenSupport.FP, s);
+            formalCount++;
+        }      
         expr.code(node, classTable, 0, s);
-        CgenSupport.emitExitFunc(tempVarNumber, formals.getLength(), s);
+        CgenSupport.emitExitFunc(formalNumber, tempVarNumber, s);
         classTable.exitScope();
     }
 
@@ -1204,7 +1207,7 @@ class let extends Expression {
     }
 
     public int getTempNumber() {
-        return init.getTempNumber() > body.getTempNumber() + 1 ? init.getTempNumber() : body.getTempNumber() + 1;
+        return CgenSupport.max(init.getTempNumber(), body.getTempNumber() + 1);
     }
 }
 
