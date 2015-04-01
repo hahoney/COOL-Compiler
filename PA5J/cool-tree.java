@@ -443,10 +443,9 @@ Main.method:
         int formalCount = 0;
         for (Enumeration e = formals.getElements(); e.hasMoreElements();) {
             formal f = (formal) e.nextElement();
-            classTable.addId(f.name, new Integer(formalCount + stackSize));
-            //CgenSupport.emitLoad(CgenSupport.ACC, formalCount + stackSize, CgenSupport.FP, s);
-            //CgenSupport.emitStore(CgenSupport.ACC, formalCount, CgenSupport.FP, s);
             formalCount++;
+            classTable.addId(f.name, new Integer(formalNumber - formalCount + stackSize));
+            //formalCount++;
         }      
         expr.code(node, classTable, 0, s);
         CgenSupport.emitExitFunc(formalNumber, tempVarNumber, s);
@@ -656,12 +655,11 @@ class assign extends Expression {
         int offset = 0;
         if (classTable.lookup(name) instanceof Integer) {
             offset = ((Integer) classTable.lookup(name)).intValue();
-            // store AR
-            if (offset >= stackSize) {
+            //if (offset >= stackSize) {
                 CgenSupport.emitStore(CgenSupport.ACC, offset, CgenSupport.FP, s);
-            }
+            //}
         } else {
-            offset = classTable.getFeatureOffset(name, node.getName(), false) + curTempVarNumber + CgenSupport.DEFAULT_OBJFIELDS;
+            offset = classTable.getFeatureOffset(name, node.getName(), false) + stackSize;
             CgenSupport.emitStore(CgenSupport.ACC, offset, CgenSupport.SELF, s);
         }
 
@@ -1192,8 +1190,6 @@ class let extends Expression {
         } else {
             init.code(node, classTable, curTemp, s);
         }
-        //int curMethodTempVarNumber = CgenSupport.getCurrentMethodTempVarNumber();
-        //System.out.println(curMethodTempVarNumber - curTemp);
         classTable.addId(identifier, new Integer(curTemp));
         CgenSupport.emitStore(CgenSupport.ACC, curTemp, CgenSupport.FP, s);
         curTemp++;
