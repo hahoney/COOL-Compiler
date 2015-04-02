@@ -647,35 +647,19 @@ class assign extends Expression {
       * @param s the output stream 
       * */
     public void code(CgenNode node, CgenClassTable classTable, int curTemp, PrintStream s) {
-        //classTable.addId(name, classTable.lookup(expr.get_type()));
         int curTempVarNumber = CgenSupport.getCurrentMethodTempVarNumber();
         int stackSize = CgenSupport.DEFAULT_OBJFIELDS + curTempVarNumber;
         expr.code(node, classTable, curTemp, s);
-        // variable could be: attr, formal, or local var
         int offset = 0;
         if (classTable.lookup(name) instanceof Integer) {
             offset = ((Integer) classTable.lookup(name)).intValue();
             //if (offset >= stackSize) {
-                CgenSupport.emitStore(CgenSupport.ACC, offset, CgenSupport.FP, s);
+            CgenSupport.emitStore(CgenSupport.ACC, offset, CgenSupport.FP, s);
             //}
         } else {
             offset = classTable.getFeatureOffset(name, node.getName(), false) + stackSize;
             CgenSupport.emitStore(CgenSupport.ACC, offset, CgenSupport.SELF, s);
         }
-
-
- /*       if (classTable.probe(name) != null) {
-            //offset = ((Integer)classTable.probe(name)).intValue() + CgenSupport.DEFAULT_OBJFIELDS;
-            offset = classTable.getFeatureOffset(name, node.getName(), false);
-            if (offset >= 0) {
-                CgenSupport.emitStore(CgenSupport.ACC, offset + CgenSupport.DEFAULT_OBJFIELDS, CgenSupport.SELF, s);
-            } else {
-                CgenSupport.emitStore(CgenSupport.ACC, curTemp + classTable.getAttrNumber(node.getName()), CgenSupport.SELF, s);
-            }
-        } else {
-            offset = classTable.getFeatureOffset(name, node.getName(), false) + curTemp + CgenSupport.DEFAULT_OBJFIELDS;
-            CgenSupport.emitStore(CgenSupport.ACC, offset, CgenSupport.FP, s);
-        } */
     }
 
     public int getTempNumber() {
@@ -755,10 +739,7 @@ class static_dispatch extends Expression {
 
         int label = CgenSupport.getLabel();
 
-        //if (dispType.equals(node.getName())) {
-        // We can alway find the method in self since it inherits from parent classes
-            CgenSupport.emitMove(CgenSupport.ACC, CgenSupport.SELF, s);
-        //}
+        CgenSupport.emitMove(CgenSupport.ACC, CgenSupport.SELF, s);
         CgenSupport.emitAbort(label, getLineNumber(), (StringSymbol) node.getFilename(), CgenSupport.DISPATCH_ABORT, s);
         
         CgenSupport.emitLabelDef(label, s);
@@ -932,7 +913,7 @@ class cond extends Expression {
         int countElse = else_exp.getTempNumber();
         int countPred = pred.getTempNumber();
         int max = countThen > countElse ? countThen : countElse;
-        return countPred > max ? countPred : max;
+        return CgenSupport.max(countPred, max);
     }
 }
 
@@ -1184,6 +1165,7 @@ class let extends Expression {
       * @param s the output stream 
       * */
     public void code(CgenNode node, CgenClassTable classTable, int curTemp, PrintStream s) {
+        int tempVarNumber = CgenSupport.getCurrentMethodTempVarNumber();
         classTable.enterScope();
         if (init instanceof no_expr) {
             CgenSupport.initVar(type_decl, s); 
@@ -1261,17 +1243,20 @@ class plus extends Expression {
 
         // There's no s1 reg provided! But the compiled code has s1!!!
         if (e1 instanceof int_const) {
-            CgenSupport.emitLoadInt(CgenSupport.S1, (IntSymbol)((int_const) e1).token, s);
+            CgenSupport.emitLoadInt(CgenSupport.ACC, (IntSymbol)((int_const) e1).token, s);
         } else {
-            e1.code(node, classTable, curTemp, s);
-            CgenSupport.emitMove(CgenSupport.S1, CgenSupport.ACC, s);        
+            e1.code(node, classTable, curTemp, s);       
             curTemp++;
         }
+        CgenSupport.emitPush(CgenSupport.ACC, s);
+
         if (e2 instanceof int_const) {
             CgenSupport.emitLoadInt(CgenSupport.ACC, (IntSymbol)((int_const) e2).token, s);
         } else {
             e2.code(node, classTable, curTemp, s);
         }
+        CgenSupport.emitLoad(CgenSupport.S1, 1, CgenSupport.SP, s);
+        CgenSupport.emitAddiu(CgenSupport.SP, CgenSupport.SP, 4, s);
         CgenSupport.emitJal("Object.copy", s);
         CgenSupport.emitLoad(CgenSupport.T2, CgenSupport.DEFAULT_OBJFIELDS, CgenSupport.ACC, s);
         CgenSupport.emitLoad(CgenSupport.T1, CgenSupport.DEFAULT_OBJFIELDS, CgenSupport.S1, s);
@@ -1401,17 +1386,21 @@ class mul extends Expression {
       * */
     public void code(CgenNode node, CgenClassTable classTable, int curTemp, PrintStream s) {
         if (e1 instanceof int_const) {
-            CgenSupport.emitLoadInt(CgenSupport.S1, (IntSymbol)((int_const) e1).token, s);
+            CgenSupport.emitLoadInt(CgenSupport.ACC, (IntSymbol)((int_const) e1).token, s);
         } else {
-            e1.code(node, classTable, curTemp, s);
-            CgenSupport.emitMove(CgenSupport.S1, CgenSupport.ACC, s);
+            e1.code(node, classTable, curTemp, s);       
             curTemp++;
         }
+        CgenSupport.emitPush(CgenSupport.ACC, s);
+
         if (e2 instanceof int_const) {
             CgenSupport.emitLoadInt(CgenSupport.ACC, (IntSymbol)((int_const) e2).token, s);
         } else {
             e2.code(node, classTable, curTemp, s);
-        }   
+        }
+        CgenSupport.emitLoad(CgenSupport.S1, 1, CgenSupport.SP, s);
+        CgenSupport.emitAddiu(CgenSupport.SP, CgenSupport.SP, 4, s);
+
         CgenSupport.emitJal("Object.copy", s);
         CgenSupport.emitLoad(CgenSupport.T2, CgenSupport.DEFAULT_OBJFIELDS, CgenSupport.ACC, s);
         CgenSupport.emitLoad(CgenSupport.T1, CgenSupport.DEFAULT_OBJFIELDS, CgenSupport.S1, s);
@@ -1467,17 +1456,21 @@ class divide extends Expression {
       * */
     public void code(CgenNode node, CgenClassTable classTable, int curTemp, PrintStream s) {
         if (e1 instanceof int_const) {
-            CgenSupport.emitLoadInt(CgenSupport.S1, (IntSymbol)((int_const) e1).token, s);
+            CgenSupport.emitLoadInt(CgenSupport.ACC, (IntSymbol)((int_const) e1).token, s);
         } else {
-            e1.code(node, classTable, curTemp, s);
-            CgenSupport.emitMove(CgenSupport.S1, CgenSupport.ACC, s);
+            e1.code(node, classTable, curTemp, s);       
             curTemp++;
         }
+        CgenSupport.emitPush(CgenSupport.ACC, s);
+
         if (e2 instanceof int_const) {
             CgenSupport.emitLoadInt(CgenSupport.ACC, (IntSymbol)((int_const) e2).token, s);
         } else {
             e2.code(node, classTable, curTemp, s);
-        }   
+        }
+        CgenSupport.emitLoad(CgenSupport.S1, 1, CgenSupport.SP, s);
+        CgenSupport.emitAddiu(CgenSupport.SP, CgenSupport.SP, 4, s);
+
         CgenSupport.emitJal("Object.copy", s);
         CgenSupport.emitLoad(CgenSupport.T2, CgenSupport.DEFAULT_OBJFIELDS, CgenSupport.ACC, s);
         CgenSupport.emitLoad(CgenSupport.T1, CgenSupport.DEFAULT_OBJFIELDS, CgenSupport.S1, s);
@@ -1672,9 +1665,9 @@ label0:
         e2.code(node, classTable, curTemp + 1, s);
         CgenSupport.emitMove(CgenSupport.T2, CgenSupport.ACC, s);
         CgenSupport.emitMove(CgenSupport.T1, CgenSupport.S1, s);
-        CgenSupport.emitLoadBool(CgenSupport.ACC, new BoolConst(false), s);
+        CgenSupport.emitLoadBool(CgenSupport.ACC, new BoolConst(true), s);
         CgenSupport.emitBeq(CgenSupport.T1, CgenSupport.T2, label, s);
-        CgenSupport.emitLoadBool(CgenSupport.A1, new BoolConst(true), s);
+        CgenSupport.emitLoadBool(CgenSupport.A1, new BoolConst(false), s);
         CgenSupport.emitJal("equality_test", s);
 
         CgenSupport.emitLabelDef(label, s);    
@@ -1741,9 +1734,9 @@ label0:
         e2.code(node, classTable, curTemp + 1, s);
         CgenSupport.emitLoad(CgenSupport.T1, CgenSupport.DEFAULT_OBJFIELDS, CgenSupport.S1, s);
         CgenSupport.emitLoad(CgenSupport.T2, CgenSupport.DEFAULT_OBJFIELDS, CgenSupport.ACC, s);
-	CgenSupport.emitLoadBool(CgenSupport.ACC, new BoolConst(false), s);
-        CgenSupport.emitBleq(CgenSupport.T1, CgenSupport.T2, label, s);
 	CgenSupport.emitLoadBool(CgenSupport.ACC, new BoolConst(true), s);
+        CgenSupport.emitBleq(CgenSupport.T1, CgenSupport.T2, label, s);
+	CgenSupport.emitLoadBool(CgenSupport.ACC, new BoolConst(false), s);
         CgenSupport.emitLabelDef(label, s);  
     }
 
@@ -1800,9 +1793,9 @@ label0:
         int label = CgenSupport.getLabel();
         e1.code(node, classTable, curTemp, s);
         CgenSupport.emitLoad(CgenSupport.T1, CgenSupport.DEFAULT_OBJFIELDS, CgenSupport.ACC, s);
-	CgenSupport.emitLoadBool(CgenSupport.T1, new BoolConst(false), s);
-        CgenSupport.emitBeqz(CgenSupport.T1, label, s);
 	CgenSupport.emitLoadBool(CgenSupport.T1, new BoolConst(true), s);
+        CgenSupport.emitBeqz(CgenSupport.T1, label, s);
+	CgenSupport.emitLoadBool(CgenSupport.T1, new BoolConst(false), s);
         CgenSupport.emitLabelDef(label, s);
     }
 
