@@ -448,6 +448,9 @@ Main.method:
             //formalCount++;
         }      
         expr.code(node, classTable, 0, s);
+        if (TreeConstants.SELF_TYPE.equals(expr.get_type()) && !(expr instanceof new_)) {
+            CgenSupport.emitMove(CgenSupport.ACC, CgenSupport.SELF, s);
+        }
         CgenSupport.emitExitFunc(formalNumber, tempVarNumber, s);
         classTable.exitScope();
     }
@@ -648,14 +651,13 @@ class assign extends Expression {
       * */
     public void code(CgenNode node, CgenClassTable classTable, int curTemp, PrintStream s) {
         int curTempVarNumber = CgenSupport.getCurrentMethodTempVarNumber();
-        int stackSize = CgenSupport.DEFAULT_OBJFIELDS + curTempVarNumber;
+        int stackSize = CgenSupport.DEFAULT_OBJFIELDS; // + curTempVarNumber;
+        
         expr.code(node, classTable, curTemp, s);
         int offset = 0;
         if (classTable.lookup(name) instanceof Integer) {
             offset = ((Integer) classTable.lookup(name)).intValue();
-            //if (offset >= stackSize) {
             CgenSupport.emitStore(CgenSupport.ACC, offset, CgenSupport.FP, s);
-            //}
         } else {
             offset = classTable.getFeatureOffset(name, node.getName(), false) + stackSize;
             CgenSupport.emitStore(CgenSupport.ACC, offset, CgenSupport.SELF, s);
@@ -735,11 +737,18 @@ class static_dispatch extends Expression {
             curTemp = CgenSupport.max(curTemp, tempVar); 
             CgenSupport.emitPush(CgenSupport.ACC, s);
         }
-        expr.code(node, classTable, curTemp, s);
 
+        int voidLabel = CgenSupport.getLabel();
+        CgenSupport.emitBeqz(CgenSupport.ACC, voidLabel, s);
+
+        expr.code(node, classTable, curTemp, s);
         int label = CgenSupport.getLabel();
 
-        CgenSupport.emitMove(CgenSupport.ACC, CgenSupport.SELF, s);
+        if (dispType.equals(node.getName())) {
+            CgenSupport.emitMove(CgenSupport.ACC, CgenSupport.SELF, s);
+        }
+       
+        CgenSupport.emitLabelDef(voidLabel, s);
         CgenSupport.emitAbort(label, getLineNumber(), (StringSymbol) node.getFilename(), CgenSupport.DISPATCH_ABORT, s);
         
         CgenSupport.emitLabelDef(label, s);
@@ -814,6 +823,7 @@ class dispatch extends Expression {
     public void code(CgenNode node, CgenClassTable classTable, int curTemp, PrintStream s) {
         AbstractSymbol dispType = expr instanceof no_expr ? node.getName() : expr.get_type();
         dispType = TreeConstants.SELF_TYPE.equals(dispType) ? node.getName() : dispType;
+
         int tempVar = 0;
         for (Enumeration e = actual.getElements(); e.hasMoreElements();) {
             Expression actualExpr = (Expression) e.nextElement();
@@ -1324,14 +1334,19 @@ class sub extends Expression {
             CgenSupport.emitLoadInt(CgenSupport.S1, (IntSymbol)((int_const) e1).token, s);
         } else {
             e1.code(node, classTable, curTemp, s);
-            CgenSupport.emitMove(CgenSupport.S1, CgenSupport.ACC, s);
+            //CgenSupport.emitMove(CgenSupport.S1, CgenSupport.ACC, s);
             curTemp++;
         }
+
+        CgenSupport.emitPush(CgenSupport.ACC, s);
+
         if (e2 instanceof int_const) {
             CgenSupport.emitLoadInt(CgenSupport.ACC, (IntSymbol)((int_const) e2).token, s);
         } else {
             e2.code(node, classTable, curTemp, s);
         }   
+        CgenSupport.emitLoad(CgenSupport.S1, 1, CgenSupport.SP, s);
+        CgenSupport.emitAddiu(CgenSupport.SP, CgenSupport.SP, 4, s);
         CgenSupport.emitJal("Object.copy", s);
         CgenSupport.emitLoad(CgenSupport.T2, CgenSupport.DEFAULT_OBJFIELDS, CgenSupport.ACC, s);
         CgenSupport.emitLoad(CgenSupport.T1, CgenSupport.DEFAULT_OBJFIELDS, CgenSupport.S1, s);
@@ -1592,10 +1607,17 @@ class lt extends Expression {
     */
         int label = CgenSupport.getLabel();
         e1.code(node, classTable, curTemp, s);
-        CgenSupport.emitMove(CgenSupport.S1, CgenSupport.ACC, s);
+        //CgenSupport.emitMove(CgenSupport.S1, CgenSupport.ACC, s);
+        CgenSupport.emitPush(CgenSupport.ACC, s);        
+
         e2.code(node, classTable, curTemp + 1, s);
-        CgenSupport.emitLoad(CgenSupport.T1, CgenSupport.DEFAULT_OBJFIELDS, CgenSupport.ACC, s);
-        CgenSupport.emitLoad(CgenSupport.T2, CgenSupport.DEFAULT_OBJFIELDS, CgenSupport.S1, s);
+        //CgenSupport.emitMove(CgenSupport.T2, CgenSupport.ACC, s);
+        CgenSupport.emitLoad(CgenSupport.S1, 1, CgenSupport.SP, s);
+        CgenSupport.emitAddiu(CgenSupport.SP, CgenSupport.SP, 4, s);
+
+        CgenSupport.emitLoad(CgenSupport.T2, CgenSupport.DEFAULT_OBJFIELDS, CgenSupport.ACC, s);
+        CgenSupport.emitLoad(CgenSupport.T1, CgenSupport.DEFAULT_OBJFIELDS, CgenSupport.S1, s);
+
         CgenSupport.emitLoadBool(CgenSupport.ACC, new BoolConst(true), s);
         CgenSupport.emitBlt(CgenSupport.T1, CgenSupport.T2, label, s);
         CgenSupport.emitLoadBool(CgenSupport.ACC, new BoolConst(false), s);
@@ -1661,10 +1683,18 @@ label0:
 */   
         int label = CgenSupport.getLabel();
         e1.code(node, classTable, curTemp, s);
-        CgenSupport.emitMove(CgenSupport.S1, CgenSupport.ACC, s);
+        //CgenSupport.emitMove(CgenSupport.S1, CgenSupport.ACC, s);
+        CgenSupport.emitPush(CgenSupport.ACC, s);        
+
         e2.code(node, classTable, curTemp + 1, s);
         CgenSupport.emitMove(CgenSupport.T2, CgenSupport.ACC, s);
-        CgenSupport.emitMove(CgenSupport.T1, CgenSupport.S1, s);
+        //CgenSupport.emitMove(CgenSupport.T1, CgenSupport.S1, s);
+        CgenSupport.emitLoad(CgenSupport.T1, 1, CgenSupport.SP, s);
+        CgenSupport.emitAddiu(CgenSupport.SP, CgenSupport.SP, 4, s);
+
+        //CgenSupport.emitLoad(CgenSupport.T2, CgenSupport.DEFAULT_OBJFIELDS, CgenSupport.ACC, s);
+        //CgenSupport.emitLoad(CgenSupport.T1, CgenSupport.DEFAULT_OBJFIELDS, CgenSupport.S1, s);
+
         CgenSupport.emitLoadBool(CgenSupport.ACC, new BoolConst(true), s);
         CgenSupport.emitBeq(CgenSupport.T1, CgenSupport.T2, label, s);
         CgenSupport.emitLoadBool(CgenSupport.A1, new BoolConst(false), s);
@@ -1729,11 +1759,20 @@ class leq extends Expression {
 label0:
 */
         int label = CgenSupport.getLabel();
+
         e1.code(node, classTable, curTemp, s);
-        CgenSupport.emitMove(CgenSupport.S1, CgenSupport.ACC, s);
+        //CgenSupport.emitMove(CgenSupport.S1, CgenSupport.ACC, s);
+        CgenSupport.emitPush(CgenSupport.ACC, s);        
+
         e2.code(node, classTable, curTemp + 1, s);
+        //CgenSupport.emitMove(CgenSupport.T2, CgenSupport.ACC, s);
+        //CgenSupport.emitMove(CgenSupport.T1, CgenSupport.S1, s);
+        CgenSupport.emitLoad(CgenSupport.S1, 1, CgenSupport.SP, s);
+        CgenSupport.emitAddiu(CgenSupport.SP, CgenSupport.SP, 4, s);
+
         CgenSupport.emitLoad(CgenSupport.T1, CgenSupport.DEFAULT_OBJFIELDS, CgenSupport.S1, s);
         CgenSupport.emitLoad(CgenSupport.T2, CgenSupport.DEFAULT_OBJFIELDS, CgenSupport.ACC, s);
+
 	CgenSupport.emitLoadBool(CgenSupport.ACC, new BoolConst(true), s);
         CgenSupport.emitBleq(CgenSupport.T1, CgenSupport.T2, label, s);
 	CgenSupport.emitLoadBool(CgenSupport.ACC, new BoolConst(false), s);
@@ -1793,9 +1832,9 @@ label0:
         int label = CgenSupport.getLabel();
         e1.code(node, classTable, curTemp, s);
         CgenSupport.emitLoad(CgenSupport.T1, CgenSupport.DEFAULT_OBJFIELDS, CgenSupport.ACC, s);
-	CgenSupport.emitLoadBool(CgenSupport.T1, new BoolConst(true), s);
+	CgenSupport.emitLoadBool(CgenSupport.ACC, new BoolConst(true), s);
         CgenSupport.emitBeqz(CgenSupport.T1, label, s);
-	CgenSupport.emitLoadBool(CgenSupport.T1, new BoolConst(false), s);
+	CgenSupport.emitLoadBool(CgenSupport.ACC, new BoolConst(false), s);
         CgenSupport.emitLabelDef(label, s);
     }
 
@@ -2161,12 +2200,12 @@ class object extends Expression {
         // if formals calculate offset in fp otherwise calculate in s0
         if (classTable.lookup(name) instanceof Integer) {
             offset = ((Integer)classTable.lookup(name)).intValue();
-//System.out.println("Load"+name + " " + offset);
             CgenSupport.emitLoad(reg, offset, CgenSupport.FP, s);
         } else {
             offset = classTable.getFeatureOffset(name, node.getName(), false);
             if (offset < 0) {
-                CgenSupport.emitLoad(reg, curTemp + classTable.getAttrNumber(node.getName()), CgenSupport.SELF, s);
+System.out.println("Sth Wrong");
+                //CgenSupport.emitLoad(reg, curTemp + classTable.getAttrNumber(node.getName()), CgenSupport.SELF, s);
             } else {
                 CgenSupport.emitLoad(reg, offset + CgenSupport.DEFAULT_OBJFIELDS, CgenSupport.SELF, s);
             }

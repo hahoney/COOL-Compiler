@@ -633,6 +633,7 @@ class CgenSupport {
         jr      $ra
 */
     public static void emitExitFunc(int size, int tempVarNumber, PrintStream s) {
+        //emitMove(ACC, SELF, s);
         emitLoad(FP, 3 + tempVarNumber , SP, s);
         emitLoad(SELF, 2 + tempVarNumber, SP, s);
         emitLoad(RA, 1 + tempVarNumber, SP, s);
