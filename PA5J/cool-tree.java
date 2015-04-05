@@ -743,8 +743,8 @@ class static_dispatch extends Expression {
 
         expr.code(node, classTable, curTemp, s);
         int label = CgenSupport.getLabel();
-
-        if (dispType.equals(node.getName())) {
+// modify this
+        if (dispType.equals(node.getName()) || TreeConstants.SELF_TYPE.equals(expr.get_type())) {
             CgenSupport.emitMove(CgenSupport.ACC, CgenSupport.SELF, s);
         }
        
@@ -832,6 +832,10 @@ class dispatch extends Expression {
             curTemp = CgenSupport.max(curTemp, tempVar); 
             CgenSupport.emitPush(CgenSupport.ACC, s);
         }
+
+        int voidLabel = CgenSupport.getLabel();
+        CgenSupport.emitBeqz(CgenSupport.ACC, voidLabel, s);
+
         expr.code(node, classTable, curTemp, s);
 
         int label = CgenSupport.getLabel();
@@ -839,6 +843,7 @@ class dispatch extends Expression {
         if (dispType.equals(node.getName())) {
             CgenSupport.emitMove(CgenSupport.ACC, CgenSupport.SELF, s);
         }
+        CgenSupport.emitLabelDef(voidLabel, s);
         CgenSupport.emitAbort(label, getLineNumber(), (StringSymbol) node.getFilename(), CgenSupport.DISPATCH_ABORT, s);
         
         CgenSupport.emitLabelDef(label, s);
