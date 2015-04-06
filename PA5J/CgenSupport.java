@@ -647,6 +647,8 @@ class CgenSupport {
               jal     _dispatch_abort*/
 
     static final String DISPATCH_ABORT = "_dispatch_abort";
+    static final String CASE_ABORT = "_case_abort";
+    static final String CASE_ABORT2 = "_case_abort2";
 
     public static void emitAbort(int label, int lineno, StringSymbol filename, String abortRoutine, PrintStream s) {
         //emitMove(ACC, SELF, s);       

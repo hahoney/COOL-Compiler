@@ -43,6 +43,8 @@ class CgenClassTable extends SymbolTable {
     private int intclasstag;
     private int boolclasstag;
 
+    private Map<AbstractSymbol, Integer> tag = new HashMap<AbstractSymbol, Integer>();
+
     
     // The following methods emit code for constants and global
     // declarations.
@@ -248,6 +250,7 @@ class CgenClassTable extends SymbolTable {
             str.print(CgenSupport.LABEL);
             // class tag
             str.println(CgenSupport.WORD + classTagNumber);
+            tag.put(pt.getName(), classTagNumber);
             int attrNumber = 0;
             CgenNode inheritPt = pt;
             List<AbstractSymbol> attrList = new ArrayList<AbstractSymbol>();
@@ -704,7 +707,11 @@ class CgenClassTable extends SymbolTable {
         return false;
     }
 
-    
+    public int getTypeTag(AbstractSymbol sym) {
+        Integer tagNumber = tag.get(sym);
+        if (tagNumber == null) { return -1; }
+        return tagNumber.intValue();
+    }   
 }
 			  
     

@@ -201,7 +201,7 @@ abstract class Case extends TreeNode {
     public abstract void dump_with_types(PrintStream out, int n);
     public abstract int getTempNumber();
     public abstract void code(CgenNode node, CgenClassTable classTable, int curTemp, PrintStream s);
-
+    public abstract int getTypeTag(CgenClassTable classTable);
 }
 
 
@@ -606,8 +606,17 @@ class branch extends Case {
     }
 
     public void code(CgenNode node, CgenClassTable classTable, int curTemp, PrintStream s) {
+        classTable.enterScope();
+        if (classTable.lookup(name) == null) {
+            classTable.addId(name, new Integer(curTemp));
+        }
+        expr.code(node, classTable, curTemp, s);
+        classTable.exitScope();
     }
 
+    public int getTypeTag(CgenClassTable classTable) {
+        return classTable.getTypeTag(type_decl);
+    }
 }
 
 
@@ -743,7 +752,7 @@ class static_dispatch extends Expression {
 
         expr.code(node, classTable, curTemp, s);
         int label = CgenSupport.getLabel();
-// modify this
+
         if (dispType.equals(node.getName()) || TreeConstants.SELF_TYPE.equals(expr.get_type())) {
             CgenSupport.emitMove(CgenSupport.ACC, CgenSupport.SELF, s);
         }
@@ -833,14 +842,13 @@ class dispatch extends Expression {
             CgenSupport.emitPush(CgenSupport.ACC, s);
         }
 
+        expr.code(node, classTable, curTemp, s);
         int voidLabel = CgenSupport.getLabel();
         CgenSupport.emitBeqz(CgenSupport.ACC, voidLabel, s);
 
-        expr.code(node, classTable, curTemp, s);
-
         int label = CgenSupport.getLabel();
 
-        if (dispType.equals(node.getName())) {
+        if (dispType.equals(node.getName()) || TreeConstants.SELF_TYPE.equals(expr.get_type())) {
             CgenSupport.emitMove(CgenSupport.ACC, CgenSupport.SELF, s);
         }
         CgenSupport.emitLabelDef(voidLabel, s);
@@ -1063,6 +1071,25 @@ class typcase extends Expression {
       * @param s the output stream 
       * */
     public void code(CgenNode node, CgenClassTable classTable, int curTemp, PrintStream s) {
+        expr.code(node, classTable, curTemp, s);
+        int label = CgenSupport.getLabel();
+        int caseLabel = CgenSupport.getLabel();
+        CgenSupport.emitAbort(caseLabel, getLineNumber(), (StringSymbol) node.getFilename(), CgenSupport.CASE_ABORT2, s);
+        for (Enumeration e = cases.getElements(); e.hasMoreElements();) {
+            Case caseBranch = (Case) e.nextElement();
+            CgenSupport.emitLabelDef(caseLabel, s);
+            CgenSupport.emitLoad(CgenSupport.T2, 0, CgenSupport.ACC, s);
+            CgenSupport.emitBlti(CgenSupport.T2, caseBranch.getTypeTag(classTable), label, s);
+            CgenSupport.emitBgti(CgenSupport.T2, caseBranch.getTypeTag(classTable), label, s);
+            int tempVarNumber = caseBranch.getTempNumber();
+            caseBranch.code(node, classTable, tempVarNumber, s);
+            CgenSupport.emitBranch(label, s);
+            caseLabel = CgenSupport.getLabel();
+        }
+        // No match
+        CgenSupport.emitLabelDef(caseLabel, s);
+        CgenSupport.emitJal(CgenSupport.CASE_ABORT, s);
+        CgenSupport.emitLabelDef(label, s);
     }
 
     public int getTempNumber() {
