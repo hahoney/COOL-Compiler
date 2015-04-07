@@ -43,8 +43,8 @@ class CgenClassTable extends SymbolTable {
     private int intclasstag;
     private int boolclasstag;
 
-    private Map<AbstractSymbol, Integer> tag = new HashMap<AbstractSymbol, Integer>();
-
+    private Map<AbstractSymbol, Integer> mapClassToTag = new HashMap<AbstractSymbol, Integer>();
+    private Map<Integer, CgenNode> mapTagToClass = new HashMap<Integer, CgenNode>();
     
     // The following methods emit code for constants and global
     // declarations.
@@ -250,7 +250,8 @@ class CgenClassTable extends SymbolTable {
             str.print(CgenSupport.LABEL);
             // class tag
             str.println(CgenSupport.WORD + classTagNumber);
-            tag.put(pt.getName(), classTagNumber);
+            mapClassToTag.put(pt.getName(), classTagNumber);
+            mapTagToClass.put(classTagNumber, pt);
             int attrNumber = 0;
             CgenNode inheritPt = pt;
             List<AbstractSymbol> attrList = new ArrayList<AbstractSymbol>();
@@ -334,8 +335,7 @@ class CgenClassTable extends SymbolTable {
                     }
                 }
             }
-        }
-        
+        }   
     }
 
     /** Creates data structures representing basic Cool classes (Object,
@@ -707,11 +707,34 @@ class CgenClassTable extends SymbolTable {
         return false;
     }
 
-    public int getTypeTag(AbstractSymbol sym) {
-        Integer tagNumber = tag.get(sym);
+    public int getTypeTag(AbstractSymbol classType) {
+        Integer tagNumber = classToTag(classType);
         if (tagNumber == null) { return -1; }
         return tagNumber.intValue();
     }   
+
+    public AbstractSymbol getTypeClass(int classTag) {
+        CgenNode classNode = tagToClass(classTag);
+        if (classNode == null) { return null; }
+        return classNode.getName();
+    }
+ 
+    public int getUpperClassTag(int tag) {
+        CgenNode classNode = tagToClass(tag);
+        if (classNode == null) { return -1; }
+        if (TreeConstants.Object_.equals(classNode.getName())) {
+            return tag;
+        }
+        return classToTag(classNode.getParentNd().getName());
+    }
+
+    private CgenNode tagToClass(int tag) {
+        return mapTagToClass.get(new Integer(tag));
+    }
+
+    private Integer classToTag(AbstractSymbol classType) {
+        return mapClassToTag.get(classType);
+    }
 }
 			  
     

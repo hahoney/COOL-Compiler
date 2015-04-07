@@ -13,6 +13,7 @@ import java.io.PrintStream;
 import java.util.Vector;
 import java.util.Map;
 import java.util.HashMap;
+import java.util.*;
 
 
 /** Defines simple phylum Program */
@@ -607,9 +608,7 @@ class branch extends Case {
 
     public void code(CgenNode node, CgenClassTable classTable, int curTemp, PrintStream s) {
         classTable.enterScope();
-        if (classTable.lookup(name) == null) {
-            classTable.addId(name, new Integer(curTemp));
-        }
+        classTable.addId(name, new Integer(curTemp));
         expr.code(node, classTable, curTemp, s);
         classTable.exitScope();
     }
@@ -1072,32 +1071,77 @@ class typcase extends Expression {
       * */
     public void code(CgenNode node, CgenClassTable classTable, int curTemp, PrintStream s) {
         expr.code(node, classTable, curTemp, s);
+        CgenSupport.emitStore(CgenSupport.ACC, curTemp, CgenSupport.FP, s);
+        curTemp = CgenSupport.max(curTemp, expr.getTempNumber() - 1);
         int label = CgenSupport.getLabel();
+        int noMatchLabel = CgenSupport.getLabel();
         int caseLabel = CgenSupport.getLabel();
+
+        List<Integer> branchTypeTags = getBranchTypeTags(classTable);
+
         CgenSupport.emitAbort(caseLabel, getLineNumber(), (StringSymbol) node.getFilename(), CgenSupport.CASE_ABORT2, s);
         for (Enumeration e = cases.getElements(); e.hasMoreElements();) {
             Case caseBranch = (Case) e.nextElement();
             CgenSupport.emitLabelDef(caseLabel, s);
+            if (!e.hasMoreElements()) {
+                caseLabel = noMatchLabel;
+            } else {
+                caseLabel = CgenSupport.getLabel();
+            }
+            int typeTag = caseBranch.getTypeTag(classTable);
+
             CgenSupport.emitLoad(CgenSupport.T2, 0, CgenSupport.ACC, s);
-            CgenSupport.emitBlti(CgenSupport.T2, caseBranch.getTypeTag(classTable), label, s);
-            CgenSupport.emitBgti(CgenSupport.T2, caseBranch.getTypeTag(classTable), label, s);
-            int tempVarNumber = caseBranch.getTempNumber();
-            caseBranch.code(node, classTable, tempVarNumber, s);
+            CgenSupport.emitBlti(CgenSupport.T2, getLowerTag(typeTag, branchTypeTags, classTable), caseLabel, s);
+            CgenSupport.emitBgti(CgenSupport.T2, getUpperTag(typeTag, branchTypeTags, classTable), caseLabel, s);
+            caseBranch.code(node, classTable, curTemp, s);
             CgenSupport.emitBranch(label, s);
-            caseLabel = CgenSupport.getLabel();
         }
-        // No match
-        CgenSupport.emitLabelDef(caseLabel, s);
+        CgenSupport.emitLabelDef(noMatchLabel, s);
         CgenSupport.emitJal(CgenSupport.CASE_ABORT, s);
         CgenSupport.emitLabelDef(label, s);
+    }
+
+    private List<Integer> getBranchTypeTags(CgenClassTable classTable) {
+        List<Integer> result = new ArrayList<Integer>();
+        for (Enumeration e = cases.getElements(); e.hasMoreElements();) {
+            Case caseBranch = (Case) e.nextElement();
+            result.add(new Integer(caseBranch.getTypeTag(classTable)));
+        }
+        return result;
+    }
+
+    private int getLowerTag(int typeTag, List<Integer> branchTypes, CgenClassTable classTable) {
+        int lowerTag = -1;
+        for (Integer e : branchTypes) {
+            int tag = classTable.getUpperClassTag(e.intValue());
+            if (typeTag == tag) {
+                lowerTag = tag;
+                break;
+            }
+        }
+        return lowerTag;
+    }
+
+    private int getUpperTag(int typeTag, List<Integer> branchTypes, CgenClassTable classTable) {
+        int objTag = classtable.getTypeTag(TreeConstants.Object_);
+        if (branchTypes.contains(new Integer(typeTag))) {
+            return typeTag;
+        }
+        for (Integer e : branchTypes) {
+            int tag = -1
+            while (tag != objTag) {
+                tag = classTable.getUpperClassTag(type);
+                if (tag )
+            }
+        } 
     }
 
     public int getTempNumber() {
         int result = expr.getTempNumber();
         for (Enumeration e = cases.getElements(); e.hasMoreElements();) { 
             int numCase = ((Case) e.nextElement()).getTempNumber();
-            result = result > numCase ? result : numCase;
-        } 
+            result = CgenSupport.max(result, numCase + 1);
+        }
         return result;
     }
 }
