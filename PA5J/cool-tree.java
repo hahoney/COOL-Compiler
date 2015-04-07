@@ -1091,8 +1091,8 @@ class typcase extends Expression {
             int typeTag = caseBranch.getTypeTag(classTable);
 
             CgenSupport.emitLoad(CgenSupport.T2, 0, CgenSupport.ACC, s);
-            CgenSupport.emitBlti(CgenSupport.T2, getLowerTag(typeTag, branchTypeTags, classTable), caseLabel, s);
-            CgenSupport.emitBgti(CgenSupport.T2, getUpperTag(typeTag, branchTypeTags, classTable), caseLabel, s);
+            CgenSupport.emitBlti(CgenSupport.T2, typeTag, caseLabel, s);
+            CgenSupport.emitBgti(CgenSupport.T2, getLowerTag(typeTag, classTable), caseLabel, s);
             caseBranch.code(node, classTable, curTemp, s);
             CgenSupport.emitBranch(label, s);
         }
@@ -1110,30 +1110,8 @@ class typcase extends Expression {
         return result;
     }
 
-    private int getLowerTag(int typeTag, List<Integer> branchTypes, CgenClassTable classTable) {
-        int lowerTag = -1;
-        for (Integer e : branchTypes) {
-            int tag = classTable.getUpperClassTag(e.intValue());
-            if (typeTag == tag) {
-                lowerTag = tag;
-                break;
-            }
-        }
-        return lowerTag;
-    }
-
-    private int getUpperTag(int typeTag, List<Integer> branchTypes, CgenClassTable classTable) {
-        int objTag = classtable.getTypeTag(TreeConstants.Object_);
-        if (branchTypes.contains(new Integer(typeTag))) {
-            return typeTag;
-        }
-        for (Integer e : branchTypes) {
-            int tag = -1
-            while (tag != objTag) {
-                tag = classTable.getUpperClassTag(type);
-                if (tag )
-            }
-        } 
+    private int getLowerTag(int typeTag, CgenClassTable classTable) {
+        return classTable.getLowerTag(typeTag);
     }
 
     public int getTempNumber() {

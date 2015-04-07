@@ -42,6 +42,8 @@ class CgenClassTable extends SymbolTable {
     private int stringclasstag;
     private int intclasstag;
     private int boolclasstag;
+    private int objclasstag;
+    private int ioclasstag;
 
     private Map<AbstractSymbol, Integer> mapClassToTag = new HashMap<AbstractSymbol, Integer>();
     private Map<Integer, CgenNode> mapTagToClass = new HashMap<Integer, CgenNode>();
@@ -241,7 +243,6 @@ class CgenClassTable extends SymbolTable {
 
     private void codeClassObjectProt() {
         for (Object c : nds) {
-            int classTagNumber = CgenSupport.getTagNumber();
             CgenNode pt = (CgenNode) c;
             // Eye catcher
             str.println(CgenSupport.WORD + "-1");
@@ -249,9 +250,9 @@ class CgenClassTable extends SymbolTable {
             CgenSupport.emitProtObjRef(pt.getName(), str);
             str.print(CgenSupport.LABEL);
             // class tag
+            int classTagNumber = mapClassToTag.get(pt.getName());
             str.println(CgenSupport.WORD + classTagNumber);
-            mapClassToTag.put(pt.getName(), classTagNumber);
-            mapTagToClass.put(classTagNumber, pt);
+
             int attrNumber = 0;
             CgenNode inheritPt = pt;
             List<AbstractSymbol> attrList = new ArrayList<AbstractSymbol>();
@@ -568,6 +569,8 @@ class CgenClassTable extends SymbolTable {
 	stringclasstag = 4 /* Change to your String class tag here */;
 	intclasstag =    2 /* Change to your Int class tag here */;
 	boolclasstag =   3 /* Change to your Bool class tag here */;
+        objclasstag = 0;
+        ioclasstag = 1;
         
  
 	enterScope();
@@ -585,6 +588,10 @@ class CgenClassTable extends SymbolTable {
     /** This method is the meat of the code generator.  It is to be
         filled in programming assignment 5 */
     public void code() {
+        setClassTags(root());
+        // I don't know how type_name() works. when I reorganize the tagnumbers of all types,
+        // the returned type name strings may change. As a result, I keep the basic type tag fixed.
+
 	if (Flags.cgen_debug) System.out.println("coding global data");
 	codeGlobalData();
 
@@ -618,7 +625,7 @@ class CgenClassTable extends SymbolTable {
 
     /** Gets the root of the inheritance tree */
     public CgenNode root() {
-	return (CgenNode)probe(TreeConstants.Object_);
+	return (CgenNode)lookup(TreeConstants.Object_);
     }
 
     /* Need some utilities to find features as I wrote in the type checking */
@@ -697,8 +704,7 @@ class CgenClassTable extends SymbolTable {
             return sub.equals(ancestor);
         }
 
-        if (ancestor.equals(sub)) { return true; }
-        if (ancestor.equals(TreeConstants.Object_)) { return true; }
+        if (ancestor.equals(sub) || ancestor.equals(TreeConstants.Object_)) { return true; }
 
         while (!sub.equals(TreeConstants.Object_)) {
             if (sub.equals(ancestor)) { return true; }
@@ -718,14 +724,18 @@ class CgenClassTable extends SymbolTable {
         if (classNode == null) { return null; }
         return classNode.getName();
     }
- 
-    public int getUpperClassTag(int tag) {
-        CgenNode classNode = tagToClass(tag);
-        if (classNode == null) { return -1; }
-        if (TreeConstants.Object_.equals(classNode.getName())) {
-            return tag;
+
+    public int getLowerTag(int classTag) {
+        AbstractSymbol curClass = getTypeClass(classTag);
+        int curTag = classTag;
+        assert(curClass != null);
+        for (Object e : nds) {
+            CgenNode node = (CgenNode) e;
+            if (isSubtype(node.getName(), curClass)) {
+                curTag = CgenSupport.max(curTag, mapClassToTag.get(node.getName()));
+            }
         }
-        return classToTag(classNode.getParentNd().getName());
+        return curTag;
     }
 
     private CgenNode tagToClass(int tag) {
@@ -734,6 +744,43 @@ class CgenClassTable extends SymbolTable {
 
     private Integer classToTag(AbstractSymbol classType) {
         return mapClassToTag.get(classType);
+    }
+
+    private void setClassTags(CgenNode node) {
+        int tagNumber = -1; 
+        if (!node.basic()) {
+            if (node.getName().equals(TreeConstants.Main)) {
+                tagNumber = nds.size() - 1; 
+            } else {
+                tagNumber = CgenSupport.getTagNumber();
+            }
+            mapClassToTag.put(node.getName(), tagNumber);
+            mapTagToClass.put(tagNumber, node);
+        } else {
+            setBasicTags(node);
+        }
+        for (Enumeration e = node.getChildren(); e.hasMoreElements();) {
+            CgenNode childNode = (CgenNode) e.nextElement();
+            setClassTags(childNode);
+        }
+    }
+
+    private void setBasicTags(CgenNode node) {
+        AbstractSymbol type = node.getName();
+        int tagNumber = -1;
+        if (TreeConstants.Object_.equals(type)) {
+            tagNumber = objclasstag;
+        } else if (TreeConstants.IO.equals(type)) {
+            tagNumber = ioclasstag;
+        } else if (TreeConstants.Int.equals(type)) {
+            tagNumber = intclasstag;
+        } else if (TreeConstants.Bool.equals(type)) {
+            tagNumber = boolclasstag;
+        } else if (TreeConstants.Str.equals(type)) {
+            tagNumber = stringclasstag;
+        }
+        mapClassToTag.put(type, tagNumber);
+        mapTagToClass.put(tagNumber, node); 
     }
 }
 			  

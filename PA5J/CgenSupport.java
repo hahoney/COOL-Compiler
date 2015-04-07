@@ -124,7 +124,7 @@ class CgenSupport {
 
 // user variables
     public static int label = 0;
-    public static int classTagNumber = 0;
+    public static int classTagNumber = 5; //0-4: OBJ, IO, INT, BOOL, STR
     public static boolean usedS1 = true;
     public static boolean usedAcc = false;
     static int getLabel() { label++; return label - 1; }
