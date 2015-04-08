@@ -202,7 +202,7 @@ abstract class Case extends TreeNode {
     public abstract void dump_with_types(PrintStream out, int n);
     public abstract int getTempNumber();
     public abstract void code(CgenNode node, CgenClassTable classTable, int curTemp, PrintStream s);
-    public abstract int getTypeTag(CgenClassTable classTable);
+    public abstract AbstractSymbol getType();
 }
 
 
@@ -446,7 +446,6 @@ Main.method:
             formal f = (formal) e.nextElement();
             formalCount++;
             classTable.addId(f.name, new Integer(formalNumber - formalCount + stackSize));
-            //formalCount++;
         }      
         expr.code(node, classTable, 0, s);
         if (TreeConstants.SELF_TYPE.equals(expr.get_type()) && !(expr instanceof new_)) {
@@ -512,6 +511,7 @@ class attr extends Feature {
 
     public void code(CgenNode node, CgenClassTable classTable, PrintStream s) {
         classTable.addId(name, classTable.lookup(type_decl));
+        CgenSupport.setCurrentMethodTempVarNumber(init.getTempNumber());
         if (init.get_type() != null) {          
             init.code(node, classTable, 0, s);
             int offset = classTable.getFeatureOffset(name, node.getName(), false) + CgenSupport.DEFAULT_OBJFIELDS;
@@ -609,12 +609,12 @@ class branch extends Case {
     public void code(CgenNode node, CgenClassTable classTable, int curTemp, PrintStream s) {
         classTable.enterScope();
         classTable.addId(name, new Integer(curTemp));
-        expr.code(node, classTable, curTemp, s);
+        expr.code(node, classTable, CgenSupport.getCurrentMethodTempVarNumber() - curTemp, s);
         classTable.exitScope();
     }
 
-    public int getTypeTag(CgenClassTable classTable) {
-        return classTable.getTypeTag(type_decl);
+    public AbstractSymbol getType() {
+        return type_decl;
     }
 }
 
@@ -847,7 +847,8 @@ class dispatch extends Expression {
 
         int label = CgenSupport.getLabel();
 
-        if (dispType.equals(node.getName()) || TreeConstants.SELF_TYPE.equals(expr.get_type())) {
+        //if (dispType.equals(node.getName()) || TreeConstants.SELF_TYPE.equals(expr.get_type())) {
+        if (TreeConstants.SELF_TYPE.equals(expr.get_type())) {
             CgenSupport.emitMove(CgenSupport.ACC, CgenSupport.SELF, s);
         }
         CgenSupport.emitLabelDef(voidLabel, s);
@@ -1076,23 +1077,23 @@ class typcase extends Expression {
         int label = CgenSupport.getLabel();
         int noMatchLabel = CgenSupport.getLabel();
         int caseLabel = CgenSupport.getLabel();
-
-        List<Integer> branchTypeTags = getBranchTypeTags(classTable);
-
+        
+        List<Case> branchTypes = getTagSortedBranches(classTable);
         CgenSupport.emitAbort(caseLabel, getLineNumber(), (StringSymbol) node.getFilename(), CgenSupport.CASE_ABORT2, s);
-        for (Enumeration e = cases.getElements(); e.hasMoreElements();) {
-            Case caseBranch = (Case) e.nextElement();
+        int count = 0;
+        for (Case caseBranch : branchTypes) {
             CgenSupport.emitLabelDef(caseLabel, s);
-            if (!e.hasMoreElements()) {
+            if (count == branchTypes.size() - 1) {
                 caseLabel = noMatchLabel;
             } else {
                 caseLabel = CgenSupport.getLabel();
             }
-            int typeTag = caseBranch.getTypeTag(classTable);
+            count++;
+            int typeTag = classTable.getTypeTag(caseBranch.getType());
 
             CgenSupport.emitLoad(CgenSupport.T2, 0, CgenSupport.ACC, s);
             CgenSupport.emitBlti(CgenSupport.T2, typeTag, caseLabel, s);
-            CgenSupport.emitBgti(CgenSupport.T2, getLowerTag(typeTag, classTable), caseLabel, s);
+            CgenSupport.emitBgti(CgenSupport.T2, getLowestSubtypeTag(caseBranch.getType(), classTable), caseLabel, s);
             caseBranch.code(node, classTable, curTemp, s);
             CgenSupport.emitBranch(label, s);
         }
@@ -1101,21 +1102,39 @@ class typcase extends Expression {
         CgenSupport.emitLabelDef(label, s);
     }
 
-    private List<Integer> getBranchTypeTags(CgenClassTable classTable) {
-        List<Integer> result = new ArrayList<Integer>();
-        for (Enumeration e = cases.getElements(); e.hasMoreElements();) {
-            Case caseBranch = (Case) e.nextElement();
-            result.add(new Integer(caseBranch.getTypeTag(classTable)));
+    private List<Case> getTagSortedBranches(CgenClassTable classTable) {
+        List<Case> result = new ArrayList<Case>();
+        for (int i = 0; i < classTable.getClassTableSize(); i++) {
+            if (result.size() == classTable.getClassTableSize()) { break; }
+            for (Enumeration e = cases.getElements(); e.hasMoreElements();) {
+                Case caseBranch = (Case) e.nextElement();
+                AbstractSymbol type = caseBranch.getType();
+                int typeTag = classTable.getTypeTag(type);
+                int lowestTag = getLowestSubtypeTag(type, classTable);
+                int distTag = lowestTag - typeTag;
+                if (distTag == i) {
+                    result.add(caseBranch);
+                }
+            }
         }
         return result;
     }
 
-    private int getLowerTag(int typeTag, CgenClassTable classTable) {
-        return classTable.getLowerTag(typeTag);
+    private List<Case> getBranches(CgenClassTable classTable) { 
+        List<Case> result = new ArrayList<Case>();
+        for (Enumeration e = cases.getElements(); e.hasMoreElements();) {
+            result.add((Case) e.nextElement());           
+        }
+        return result;
+    }
+
+    private int getLowestSubtypeTag(AbstractSymbol curType, CgenClassTable classTable) {
+        AbstractSymbol type = classTable.getLowestSubtype(curType);
+        return classTable.getTypeTag(type);
     }
 
     public int getTempNumber() {
-        int result = expr.getTempNumber();
+        int result = CgenSupport.max(expr.getTempNumber(), 1);
         for (Enumeration e = cases.getElements(); e.hasMoreElements();) { 
             int numCase = ((Case) e.nextElement()).getTempNumber();
             result = CgenSupport.max(result, numCase + 1);
@@ -2245,9 +2264,10 @@ class object extends Expression {
       * @param s the output stream 
       * */
     public void code(CgenNode node, CgenClassTable classTable, int curTemp, PrintStream s) {
-        String reg = CgenSupport.ACC; //CgenSupport.getReg();
+        String reg = CgenSupport.ACC;
         AbstractSymbol typeName = get_type();
         if (TreeConstants.SELF_TYPE.equals(typeName)) {
+            CgenSupport.emitMove(CgenSupport.ACC, CgenSupport.SELF, s);
             return;
         }
         int offset = 0;

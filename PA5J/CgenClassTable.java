@@ -301,16 +301,14 @@ class CgenClassTable extends SymbolTable {
             for (Enumeration e = node.getFeatures().getElements(); e.hasMoreElements();) {
                 tempVarNumber = CgenSupport.max(tempVarNumber, ((Feature) e.nextElement()).getTempNumber());
             }
-
             CgenSupport.emitInitRef(node.getName(), str);
             str.print(CgenSupport.LABEL);
-            CgenSupport.emitEnterFunc(0, str);
+            CgenSupport.emitEnterFunc(tempVarNumber, str);
             if (!TreeConstants.Object_.equals(node.getName())) {
                 str.print(CgenSupport.JAL);
                 CgenSupport.emitInitRef(node.getParentNd().getName(), str);
                 str.println("");
             }
-
             for (Enumeration e = node.getFeatures().getElements(); e.hasMoreElements();) {
                 Feature feature = (Feature) e.nextElement();
                 if (feature instanceof attr) {
@@ -318,9 +316,8 @@ class CgenClassTable extends SymbolTable {
                     ((attr) feature).code(node, this, str);
                 }
             }
-
             CgenSupport.emitMove(CgenSupport.ACC, CgenSupport.SELF, str);
-            CgenSupport.emitExitFunc(0, 0, str);
+            CgenSupport.emitExitFunc(0, tempVarNumber, str);
         }
     }
 
@@ -725,17 +722,25 @@ class CgenClassTable extends SymbolTable {
         return classNode.getName();
     }
 
-    public int getLowerTag(int classTag) {
-        AbstractSymbol curClass = getTypeClass(classTag);
-        int curTag = classTag;
-        assert(curClass != null);
+    public AbstractSymbol getLowestSubtype(AbstractSymbol curType) {
+        assert(curType != null);
+        int maxSubtypeTag = -1;
+        AbstractSymbol result = null;
         for (Object e : nds) {
-            CgenNode node = (CgenNode) e;
-            if (isSubtype(node.getName(), curClass)) {
-                curTag = CgenSupport.max(curTag, mapClassToTag.get(node.getName()));
+            AbstractSymbol nodeType = ((CgenNode) e).getName();
+            if (isSubtype(nodeType, curType)) {
+                int curTag = getTypeTag(nodeType);
+                if (curTag > maxSubtypeTag) {
+                    maxSubtypeTag = curTag;
+                    result = nodeType;
+                }
             }
         }
-        return curTag;
+        return result;
+    }
+
+    public int getClassTableSize() {
+        return nds.size();
     }
 
     private CgenNode tagToClass(int tag) {
@@ -782,6 +787,7 @@ class CgenClassTable extends SymbolTable {
         mapClassToTag.put(type, tagNumber);
         mapTagToClass.put(tagNumber, node); 
     }
+
 }
 			  
     
