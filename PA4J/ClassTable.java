@@ -189,12 +189,7 @@ class ClassTable {
         basicClassMap.put(TreeConstants.Str, Str_class); 
         basicClassMap.put(TreeConstants.SELF_TYPE, Self_class); 
      
-        classTableMap.put(TreeConstants.Object_, Object_class);
-        classTableMap.put(TreeConstants.IO, IO_class);
-        classTableMap.put(TreeConstants.Int, Int_class);
-        classTableMap.put(TreeConstants.Bool, Bool_class);
-        classTableMap.put(TreeConstants.Str, Str_class); 
-        classTableMap.put(TreeConstants.SELF_TYPE, Self_class);  
+        classTableMap.putAll(basicClassMap);
     }
 
     public ClassTable(Classes cls) {
@@ -218,14 +213,12 @@ class ClassTable {
         if (TreeConstants.SELF_TYPE.equals(sub) || TreeConstants.SELF_TYPE.equals(ancestor)) {
             return sub.equals(ancestor);
         }
-
-        if (ancestor.equals(sub)) { return true; }
-        if (ancestor.equals(TreeConstants.Object_)) { return true; }
+        if (ancestor.equals(sub) || ancestor.equals(TreeConstants.Object_)) { return true; }
         if (basicClassMap.containsKey(sub)) { return false; }
 
         while (!sub.equals(TreeConstants.Object_)) {
             if (sub.equals(ancestor)) { return true; }
-            else { sub = classTableMap.get(sub).parent; }
+            sub = classTableMap.get(sub).parent;
         }
         return false; 
     }
@@ -287,9 +280,8 @@ class ClassTable {
     }
 
     public AbstractSymbol getLub(AbstractSymbol typeA, AbstractSymbol typeB) {
-        if (typeA.equals(typeB)) { return typeA; }
+        if (typeA.equals(typeB) || isSubtype(typeB, typeA)) { return typeA; }
         if (isSubtype(typeA, typeB)) { return typeB; }
-        if (isSubtype(typeB, typeA)) { return typeA; }
         return getLub(getParent(typeA), getParent(typeB));
     }
 
@@ -304,16 +296,12 @@ class ClassTable {
                    !TreeConstants.IO.equals(curClass.name)) {
                 if (!classTableMap.containsKey(curClass.parent)) {
                     if (!undefined.contains(curClass.parent)) {
-                    undefined.add(curClass.parent);
-                    semantError(curClass).println("Class " + curClass.name.toString() + 
-                                                  " inherits from an undefined class " +
-                                                  curClass.parent.toString() + ".");
+                        undefined.add(curClass.parent);
+                        emitErrorInheritUndefinedClass(curClass);
                     }
                     break;
                 } else if (visited.contains(curClass.parent)) {
-                    semantError(curClass).println("Class " + curClass.parent.toString() +
-                                                  ", or an ancestor of " + curClass.parent.toString() +
-                                                  ", is involved in an inheritance cycle.");
+                    emitErrorInheritanceCycle(curClass);
                     break;
                 } else {
                     curClass = classTableMap.get(curClass.parent);
@@ -323,32 +311,62 @@ class ClassTable {
         }
     }
 
+    private void emitErrorInheritUndefinedClass(class_c curClass) {
+        semantError(curClass).println("Class " + curClass.name.toString() + 
+                                      " inherits from an undefined class " +
+                                      curClass.parent.toString() + ".");
+    }
+
+    private void emitErrorInheritanceCycle(class_c curClass) {
+        semantError(curClass).println("Class " + curClass.parent.toString() +
+                                      ", or an ancestor of " + curClass.parent.toString() +
+                                      ", is involved in an inheritance cycle.");
+    }
+
+    // create mapping between class name and class
     private Map<AbstractSymbol, class_c> checkClasses(Classes cls) {
-        class_c tempClass;
+        class_c curClass;
 	for (Enumeration e = cls.getElements(); e.hasMoreElements();) {
-            tempClass = (class_c) e.nextElement();
-            if (basicClassMap.containsKey(tempClass.name)) {
-                semantError(tempClass).println("Redefinition of basic class " + tempClass.name.toString() + ".");
+            curClass = (class_c) e.nextElement();
+            AbstractSymbol parent = curClass.parent;
+            if (basicClassMap.containsKey(curClass.name)) {
+                emitErrorRedefineBasicClass(curClass);
             }
-            if (tempClass.parent.equals(TreeConstants.Int) || 
-                tempClass.parent.equals(TreeConstants.Bool) ||
-                tempClass.parent.equals(TreeConstants.Str) ||
-                tempClass.parent.equals(TreeConstants.SELF_TYPE)) {
-                semantError(tempClass).println("Class " + tempClass.name.toString() + " cannot inherit class " +
-                                               tempClass.parent.toString() + ".");
+            if (parent.equals(TreeConstants.Int) || 
+                parent.equals(TreeConstants.Bool) ||
+                parent.equals(TreeConstants.Str) ||
+                parent.equals(TreeConstants.SELF_TYPE)) {
+                emitErrorCannotInheritClass(curClass);
             }
-            // missing parent is Object by default after parsing. No need to check
-            if (classTableMap.containsKey(tempClass.name)) {
-                semantError(tempClass).println("Class " + tempClass.name.toString() + " was previously defined.");
+            // missing default parent is Object. No need to check
+            if (classTableMap.containsKey(curClass.name)) {
+                emitErrorClassAlreadyDefined(curClass);
             }
-            classTableMap.put(tempClass.name, tempClass);
+            classTableMap.put(curClass.name, curClass);
         }
         if (!classTableMap.containsKey(TreeConstants.Main)) {
-            semantError().println("Class Main is not defined.");
+            emitErrorMainNotDefined();
         }
         return classTableMap;
     }
 
+    private void emitErrorRedefineBasicClass(class_c curClass) {
+        semantError(curClass).println("Redefinition of basic class " + curClass.name.toString() + ".");
+    }
+
+    private void emitErrorCannotInheritClass(class_c curClass) {
+        semantError(curClass).println("Class " + curClass.name.toString() + " cannot inherit class " +
+                                      curClass.parent.toString() + ".");
+    }
+
+    private void emitErrorClassAlreadyDefined(class_c curClass) {
+        semantError(curClass).println("Class " + curClass.name.toString() + " was previously defined.");
+    }
+
+    private void emitErrorMainNotDefined() {
+        semantError().println("Class Main is not defined.");
+    }
+    
     /** Prints line number and file name of the given class.
      *
      * Also increments semantic error count.

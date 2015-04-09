@@ -122,7 +122,10 @@ class CgenSupport {
     final static String BLT     = "\tblt\t";
     final static String BGT     = "\tbgt\t";
 
-// user variables
+    static final String DISPATCH_ABORT = "_dispatch_abort";
+    static final String CASE_ABORT = "_case_abort";
+    static final String CASE_ABORT2 = "_case_abort2";
+
     public static int label = 0;
     public static int classTagNumber = 5; //0-4: OBJ, IO, INT, BOOL, STR
     public static boolean usedS1 = true;
@@ -605,17 +608,7 @@ class CgenSupport {
 	s.println("\t.byte\t0\t");
     }
 
-
     // My own utilities
-
-/*
-        addiu   $sp $sp -12
-        sw      $fp 12($sp)
-        sw      $s0 8($sp)
-        sw      $ra 4($sp)
-        addiu   $fp $sp 4
-        move    $s0 $a0
-*/
     public static void emitEnterFunc(int size, PrintStream s) {
         emitAddiu(SP, SP, -(size + DEFAULT_OBJFIELDS) * WORD_SIZE, s);
         emitStore(FP, 3 + size, SP, s);
@@ -624,34 +617,16 @@ class CgenSupport {
         emitAddiu(FP, SP, WORD_SIZE, s);
         emitMove(SELF, ACC, s);
     }
-
-/*
-        lw      $fp 12($sp)
-        lw      $s0 8($sp)
-        lw      $ra 4($sp)
-        addiu   $sp $sp 12
-        jr      $ra
-*/
+    // keep AR size balanced
     public static void emitExitFunc(int size, int tempVarNumber, PrintStream s) {
-        //emitMove(ACC, SELF, s);
         emitLoad(FP, 3 + tempVarNumber , SP, s);
         emitLoad(SELF, 2 + tempVarNumber, SP, s);
         emitLoad(RA, 1 + tempVarNumber, SP, s);
         emitAddiu(SP, SP, (3 + size + tempVarNumber) * WORD_SIZE, s);
         emitReturn(s);
     }
-/*
-               bne     $a0 $zero label0
-               la      $a0 str_const0
-               li      $t1 1
-              jal     _dispatch_abort*/
 
-    static final String DISPATCH_ABORT = "_dispatch_abort";
-    static final String CASE_ABORT = "_case_abort";
-    static final String CASE_ABORT2 = "_case_abort2";
-
-    public static void emitAbort(int label, int lineno, StringSymbol filename, String abortRoutine, PrintStream s) {
-        //emitMove(ACC, SELF, s);       
+    public static void emitAbort(int label, int lineno, StringSymbol filename, String abortRoutine, PrintStream s) {     
         emitBne(ACC, ZERO, label, s);
         emitLoadString(ACC, filename, s);
         emitLoadImm(T1, lineno, s);
@@ -661,11 +636,8 @@ class CgenSupport {
     public static int max(int a, int b) {
         return a > b ? a : b;
     }
-
-    public static void printClassOffset(AbstractSymbol className, AbstractSymbol featureName, int offset) {
-        System.out.println("Class: " + className + " Feature Name: " + featureName + " offset: " + offset);
-    }
-
+    
+    // default value for uninitialized var
     public static void initVar(AbstractSymbol type_decl, PrintStream s) {
         int emptyStr = AbstractTable.stringtable.lookupIndex("");
         int emptyInt = AbstractTable.inttable.lookupIndex("0");
@@ -679,9 +651,12 @@ class CgenSupport {
         } else {
             emitMove(ACC, ZERO, s);
         }
-        //emitStore(ACC, offset, FP, s);
     }
-    
+
+    // Utility
+    public static void printClassOffset(AbstractSymbol className, AbstractSymbol featureName, int offset) {
+        System.out.println("Class: " + className + " Feature Name: " + featureName + " offset: " + offset);
+    }   
 }
     
     

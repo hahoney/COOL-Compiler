@@ -44,7 +44,8 @@ class CgenClassTable extends SymbolTable {
     private int boolclasstag;
     private int objclasstag;
     private int ioclasstag;
-
+    
+    /* bi-mapping between class symbol and tag */
     private Map<AbstractSymbol, Integer> mapClassToTag = new HashMap<AbstractSymbol, Integer>();
     private Map<Integer, CgenNode> mapTagToClass = new HashMap<Integer, CgenNode>();
     
@@ -55,8 +56,6 @@ class CgenClassTable extends SymbolTable {
      * declare the global names.
      * */
     private void codeGlobalData() {
-	// The following global names must be defined first.
-
 	str.print("\t.data\n" + CgenSupport.ALIGN);
 	str.println(CgenSupport.GLOBAL + CgenSupport.CLASSNAMETAB);
 	str.print(CgenSupport.GLOBAL); 
@@ -77,9 +76,6 @@ class CgenClassTable extends SymbolTable {
 	str.println(CgenSupport.GLOBAL + CgenSupport.INTTAG);
 	str.println(CgenSupport.GLOBAL + CgenSupport.BOOLTAG);
 	str.println(CgenSupport.GLOBAL + CgenSupport.STRINGTAG);
-
-	// We also need to know the tag of the Int, String, and Bool classes
-	// during code generation.
 
 	str.println(CgenSupport.INTTAG + CgenSupport.LABEL 
 		    + CgenSupport.WORD + intclasstag);
@@ -200,37 +196,22 @@ class CgenClassTable extends SymbolTable {
     // class A has f
     // class B inh A has B.g (A.f)
     // class C inh B has C.w, C.g, A.f
-    private void codeClassDispatchTable(CgenNode c) {
-        Map<AbstractSymbol, AbstractSymbol> methodMap = new HashMap<AbstractSymbol, AbstractSymbol>();
-        List<CgenNode> classList = new ArrayList<CgenNode>();
+    private void codeClassDispatchTable(CgenNode node) {
+        Map<AbstractSymbol, AbstractSymbol> methodMap = null;
+        List<CgenNode> classList = null;
  
-        CgenNode pt = c;
-        CgenSupport.emitDispTableRef(pt.getName(), str);
+        CgenSupport.emitDispTableRef(node.getName(), str);
         str.print(CgenSupport.LABEL);
-        Stack<CgenNode> classStack = new Stack<CgenNode>();            
-        while (!TreeConstants.No_class.equals(pt.getName())) {
-            classStack.push(pt);
-            pt = pt.getParentNd();
-        }
-        // top down if feature already in map (upper class has it), overwrite it.
-        // if A <= B (map.get(method) = A)
-        // map.get(method) for B is B. If A > B, map.get(method) for B is A 
-        while (!classStack.isEmpty()) {
-            pt = classStack.pop(); 
-            classList.add(pt);       
+         
+        classList = reverseNds(getInheritance(node.getName()));
+        methodMap = genMethodMap(classList);
+
+        for (CgenNode pt : classList) {
             for (Enumeration e = pt.getFeatures().getElements(); e.hasMoreElements();) {
-                Feature feature = (Feature) e.nextElement();
-                if (feature instanceof method) {
-                    methodMap.put(feature.getName(), pt.getName());
-                }
-            }   
-        }
-        for (CgenNode node : classList) {
-            for (Enumeration e = node.getFeatures().getElements(); e.hasMoreElements();) {
                 Feature feature = (Feature) e.nextElement();
                 if (feature instanceof method && methodMap.containsKey(feature.getName())) {
                     AbstractSymbol lastOverrideClassName = methodMap.get(feature.getName());  
-                    AbstractSymbol className = isSubtype(node.getName(), lastOverrideClassName) ? node.getName() : lastOverrideClassName;
+                    AbstractSymbol className = isSubtype(pt.getName(), lastOverrideClassName) ? pt.getName() : lastOverrideClassName;
                     str.print(CgenSupport.WORD);
                     CgenSupport.emitMethodRef(className, feature.getName(), str);
                     methodMap.remove(feature.getName());
@@ -238,7 +219,19 @@ class CgenClassTable extends SymbolTable {
                 }
             } 
         }  
- 
+    }
+
+    private Map<AbstractSymbol, AbstractSymbol> genMethodMap(List<CgenNode> classList) {
+        Map<AbstractSymbol, AbstractSymbol> methodMap = new HashMap<AbstractSymbol, AbstractSymbol>();
+        for (CgenNode pt : classList) {       
+            for (Enumeration e = pt.getFeatures().getElements(); e.hasMoreElements();) {
+                Feature feature = (Feature) e.nextElement();
+                if (feature instanceof method) {
+                    methodMap.put(feature.getName(), pt.getName());
+                }
+            }   
+        }
+        return methodMap;
     }
 
     private void codeClassObjectProt() {
@@ -253,28 +246,16 @@ class CgenClassTable extends SymbolTable {
             int classTagNumber = mapClassToTag.get(pt.getName());
             str.println(CgenSupport.WORD + classTagNumber);
 
-            int attrNumber = 0;
-            CgenNode inheritPt = pt;
-            List<AbstractSymbol> attrList = new ArrayList<AbstractSymbol>();
-            while (!TreeConstants.Object_.equals(inheritPt.getName())) {
-                for (Enumeration e = inheritPt.getFeatures().getElements(); e.hasMoreElements();) {
-                    Feature feature = (Feature) e.nextElement();
-                    if (feature instanceof attr) {
-                        attrNumber++;
-                        attrList.add(feature.getType());
-                    }
-                }
-                inheritPt = inheritPt.getParentNd();
-            }
+            List<AbstractSymbol> attrList = getAttrList(pt);
             str.print(CgenSupport.WORD);
-            str.println(CgenSupport.DEFAULT_OBJFIELDS + attrNumber);
+            str.println(CgenSupport.DEFAULT_OBJFIELDS + attrList.size());
 
             // dispatch table
             str.print(CgenSupport.WORD);
             CgenSupport.emitDispTableRef(pt.getName(), str);
             str.println("");
 
-            // attr list
+            // generate attr list
             int attrOffset = CgenSupport.DEFAULT_OBJFIELDS;
             for (AbstractSymbol attr : attrList) {
                 str.print(CgenSupport.WORD);
@@ -294,16 +275,31 @@ class CgenClassTable extends SymbolTable {
         }
     }
 
+    private List<AbstractSymbol> getAttrList(CgenNode node) {
+        int attrNumber = 0;
+        CgenNode inheritPt = node;
+        List<AbstractSymbol> attrList = new ArrayList<AbstractSymbol>();
+        while (!TreeConstants.Object_.equals(inheritPt.getName())) {
+            for (Enumeration e = inheritPt.getFeatures().getElements(); e.hasMoreElements();) {
+                Feature feature = (Feature) e.nextElement();
+                if (feature instanceof attr) {
+                    attrNumber++;
+                    attrList.add(feature.getType());
+                }
+            }
+            inheritPt = inheritPt.getParentNd();
+        } 
+        return attrList;
+    }
+
     private void codeClassObjectInit() {
         for (Object c : nds) {
             CgenNode node = (CgenNode) c;
-            int tempVarNumber = 0;
-            for (Enumeration e = node.getFeatures().getElements(); e.hasMoreElements();) {
-                tempVarNumber = CgenSupport.max(tempVarNumber, ((Feature) e.nextElement()).getTempNumber());
-            }
+            int tempVarNumber = calcTempVarNumber(node);
             CgenSupport.emitInitRef(node.getName(), str);
             str.print(CgenSupport.LABEL);
             CgenSupport.emitEnterFunc(tempVarNumber, str);
+
             if (!TreeConstants.Object_.equals(node.getName())) {
                 str.print(CgenSupport.JAL);
                 CgenSupport.emitInitRef(node.getParentNd().getName(), str);
@@ -319,6 +315,14 @@ class CgenClassTable extends SymbolTable {
             CgenSupport.emitMove(CgenSupport.ACC, CgenSupport.SELF, str);
             CgenSupport.emitExitFunc(0, tempVarNumber, str);
         }
+    }
+
+    private int calcTempVarNumber(CgenNode node) {
+        int tempVarNumber = 0;
+        for (Enumeration e = node.getFeatures().getElements(); e.hasMoreElements();) {
+            tempVarNumber = CgenSupport.max(tempVarNumber, ((Feature) e.nextElement()).getTempNumber());
+        }
+        return tempVarNumber;
     }
 
     private void codeClassMethod() {
@@ -586,8 +590,6 @@ class CgenClassTable extends SymbolTable {
         filled in programming assignment 5 */
     public void code() {
         setClassTags(root());
-        // I don't know how type_name() works. when I reorganize the tagnumbers of all types,
-        // the returned type name strings may change. As a result, I keep the basic type tag fixed.
 
 	if (Flags.cgen_debug) System.out.println("coding global data");
 	codeGlobalData();
@@ -629,8 +631,6 @@ class CgenClassTable extends SymbolTable {
     // get feature from curClass or its nearest ancestor
     // The class names are installed in two ways. One is to nds for CgenNode only
     // Two is to the symbolTable as (name, nd) name as AbstractSymbol and nd as CgenNode
- 
-    // find right method bottom to up find index top to bottom. find the index of last occurance
     public int getFeatureOffset(AbstractSymbol featureName, AbstractSymbol className, boolean isMethod) {
         int featureCount = -1;
         int lastOccurance = -1;
@@ -672,7 +672,7 @@ class CgenClassTable extends SymbolTable {
     }
 
    
-    // Get all ancestor nodes from top to bottom
+    // Get all ancestor nodes from bottom to top
     private List<CgenNode> getInheritance(AbstractSymbol className) {
         List<CgenNode> result = new ArrayList<CgenNode>();
         CgenNode pt = (CgenNode) lookup(className);
@@ -770,6 +770,8 @@ class CgenClassTable extends SymbolTable {
         }
     }
 
+    // The class tags for basic types must be fixed. Otherwise
+    // the return class name string by Object.type_name() could be wrong.
     private void setBasicTags(CgenNode node) {
         AbstractSymbol type = node.getName();
         int tagNumber = -1;
